@@ -1,0 +1,7 @@
+// Root build.gradle — wspólna konfiguracja dla wszystkich subprojektów.
+// Każda wersja MC ma swój własny build.gradle w swoim folderze.
+
+allprojects {
+    group = "dev.gdlev"
+    version = "0.4"
+}
