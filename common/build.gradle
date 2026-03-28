@@ -1,11 +1,3 @@
-// common/build.gradle
-// Ten moduł zawiera kod współdzielony między wersjami.
-// NIE ma tutaj zależności od konkretnej wersji Minecrafta.
-// Możesz tu trzymać np. stałe, interfejsy, util klasy.
-
 plugins {
     id "java"
 }
-
-// Brak minecraft/fabric-loom tutaj — common to czysty Java moduł.
-// Kod specyficzny dla MC pisz w subprojektach wersji.

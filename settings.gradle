@@ -10,6 +10,7 @@ pluginManagement {
 
 rootProject.name = "better-screenshots"
 
+include("26.1")
 include("1.21.11")
 include("1.21.10")
 include("1.21.8")

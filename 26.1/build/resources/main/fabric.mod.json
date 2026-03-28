@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "better_screenshots",
+  "version": "0.7+26.1",
+  "name": "Better ScreenShots",
+  "description": "Enhance your screenshots with previews, sounds, and an in-game gallery!",
+  "authors": ["GDLev"],
+  "contact": {
+    "homepage": "https://modrinth.com/mod/better-mc-screenshots"
+  },
+  "license": "All-Rights-Reserved",
+  "icon": "assets/better_screenshots/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "fabric-datagen": ["dev.gdlev.better_screenshots.client.Better_screenshotsDataGenerator"],
+    "client": ["dev.gdlev.better_screenshots.client.Better_screenshotsClient"],
+    "main": ["dev.gdlev.better_screenshots.Better_screenshots"]
+  },
+  "mixins": [
+    "better_screenshots.mixins.json",
+    {"config": "better_screenshots.client.mixins.json", "environment": "client"}
+  ],
+  "depends": {
+    "fabricloader": ">=0.18.4",
+    "fabric-api": "*",
+    "fabric-command-api-v2": "*",
+    "minecraft": "26.1"
+  }
+}
