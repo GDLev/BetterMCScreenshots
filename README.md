@@ -24,3 +24,4 @@ To build the project using Gradle, run the following commands in the project roo
 ./gradlew 1.21.11:build    # version 1.21.11
 ./gradlew 1.21.10:build    # version 1.21.10
 ./gradlew 1.21.8:build     # version 1.21.8
+./gradlew 26.1:build       # version 26.1
