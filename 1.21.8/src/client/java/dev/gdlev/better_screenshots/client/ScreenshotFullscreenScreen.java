@@ -1,11 +1,20 @@
 package dev.gdlev.better_screenshots.client;
 
+import com.mojang.blaze3d.platform.NativeImage;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+
+import java.io.File;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
 
 public class ScreenshotFullscreenScreen extends Screen {
 
@@ -18,6 +27,26 @@ public class ScreenshotFullscreenScreen extends Screen {
     private static final float BOUNCE_HEIGHT     = 18f;
     private static final float EXIT_DROP         = 300f;
     private static final int   MARGIN            = 32;
+
+    // Navigation slide transition
+    private static final long  NAV_ANIM_MS    = 300;
+    private static final float NAV_SLIDE_FRAC = 0.35f;
+
+    // Arrow fade
+    private static final long ARROW_FADE_MS = 250;
+    private static final int  ARROW_W       = 20;
+    private static final int  ARROW_H       = 36;
+    private static final int  ARROW_MARGIN  = 12;
+
+    // Action buttons
+    private static final ResourceLocation ICON_COPY     = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/copy.png");
+    private static final ResourceLocation ICON_COPY_H   = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/copy_hover.png");
+    private static final ResourceLocation ICON_DELETE   = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/close.png");
+    private static final ResourceLocation ICON_DELETE_H = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/close_hover.png");
+
+    private static final int ACT_BTN_W   = 12;
+    private static final int ACT_BTN_H   = 15;
+    private static final int ACT_BTN_GAP = 0;
 
     private long    openedAt     = -1;
     private long    loadingStart = System.currentTimeMillis();
@@ -32,9 +61,56 @@ public class ScreenshotFullscreenScreen extends Screen {
 
     private int lastCurX, lastCurY, lastCurW, lastCurH;
 
+    // ── Navigation state ──────────────────────────────────────────────────────
+
+    private List<File> screenshotFiles  = new ArrayList<>();
+    private int        currentFileIndex = -1;
+    private boolean    navLoading       = false;
+
+    private int            navDirection   = 0;   // +1 = right/older, -1 = left/newer
+    private long           navAnimStart   = -1;
+    private ResourceLocation navOldTexId  = null;
+    private DynamicTexture navOldTex      = null;
+    private DynamicTexture navOldTexOwned = null;
+
+    private static final ResourceLocation NAV_OLD_TEX_ID =
+            ResourceLocation.fromNamespaceAndPath("better_screenshots", "nav_old_screenshot");
+
+    private long imageFullyShownAt = -1;
+
+    // Set by navigation to suppress the slide-up entrance animation
+    private boolean skipEntranceAnim = false;
+
     public ScreenshotFullscreenScreen(Screen parent) {
         super(Component.literal(""));
         this.parent = parent;
+    }
+
+    // ── Navigation context ────────────────────────────────────────────────────
+
+    public void setNavigationContext(List<File> files, int currentIndex) {
+        this.screenshotFiles  = new ArrayList<>(files);
+        this.currentFileIndex = currentIndex;
+    }
+
+    public void initNavigationFromScreenshotsDir(File currentFile) {
+        Minecraft mc    = Minecraft.getInstance();
+        File      dir   = new File(mc.gameDirectory, "screenshots");
+        File[]    found = dir.listFiles(
+                f -> f.isFile() && f.getName().toLowerCase().endsWith(".png"));
+        if (found == null) return;
+        Arrays.sort(found, Comparator.comparingLong(File::lastModified).reversed());
+        screenshotFiles  = new ArrayList<>(Arrays.asList(found));
+        currentFileIndex = 0;
+        if (currentFile != null) {
+            for (int i = 0; i < screenshotFiles.size(); i++) {
+                if (screenshotFiles.get(i).getAbsolutePath()
+                        .equals(currentFile.getAbsolutePath())) {
+                    currentFileIndex = i;
+                    break;
+                }
+            }
+        }
     }
 
     public void markLoaded() {
@@ -54,6 +130,12 @@ public class ScreenshotFullscreenScreen extends Screen {
         openedAt     = -1;
         closing      = false;
         closeStart   = -1;
+        imageFullyShownAt = -1;
+        navAnimStart = -1;
+        navOldTexId  = null;
+        navOldTex    = null;
+        releaseOldTexOwned();
+        skipEntranceAnim = false;
         if (loaded && expectedTexture != null) initStartPosition();
     }
 
@@ -103,11 +185,253 @@ public class ScreenshotFullscreenScreen extends Screen {
 
     private float easeOutCubic(float t) { return 1f - (float) Math.pow(1f - t, 3); }
     private float easeInCubic(float t)  { return t * t * t; }
+    private float easeInOutCubic(float t) {
+        return t < 0.5f
+                ? 4f * t * t * t
+                : 1f - (float) Math.pow(-2f * t + 2f, 3) / 2f;
+    }
 
     private void startClose() {
         if (closing) return;
         closing    = true;
         closeStart = System.currentTimeMillis();
+    }
+
+    private void releaseOldTexOwned() {
+        if (navOldTexOwned != null) {
+            navOldTexOwned.close();
+            navOldTexOwned = null;
+        }
+    }
+
+    // ── Navigation & File Management ──────────────────────────────────────────
+
+    private boolean hasPrev() { return currentFileIndex > 0; }
+
+    private boolean hasNext() {
+        return currentFileIndex >= 0 && currentFileIndex < screenshotFiles.size() - 1;
+    }
+
+    private static NativeImage copyPixels(NativeImage src) {
+        NativeImage copy = new NativeImage(src.format(), src.getWidth(), src.getHeight(), false);
+        for (int y = 0; y < src.getHeight(); y++) {
+            for (int x = 0; x < src.getWidth(); x++) {
+                copy.setPixel(x, y, src.getPixel(x, y));
+            }
+        }
+        return copy;
+    }
+
+    private void navigateTo(int direction) {
+        if (navLoading) return;
+        int newIndex = currentFileIndex + direction;
+        if (newIndex < 0 || newIndex >= screenshotFiles.size()) return;
+
+        boolean useAnim = ScreenshotConfig.get().uiAnimationsEnabled();
+        if (useAnim) {
+            releaseOldTexOwned();
+            DynamicTexture current = expectedTexture;
+            if (current != null && current.getPixels() != null) {
+                try {
+                    NativeImage oldPixels = current.getPixels();
+                    NativeImage copy = copyPixels(oldPixels);
+                    navOldTexOwned = new DynamicTexture(() -> "nav_old_screenshot", copy);
+                    Minecraft.getInstance().getTextureManager()
+                            .register(NAV_OLD_TEX_ID, navOldTexOwned);
+                    navOldTexId = NAV_OLD_TEX_ID;
+                    navOldTex   = navOldTexOwned;
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    navOldTexId = null;
+                    navOldTex   = null;
+                }
+            }
+
+            navDirection = direction;
+            navAnimStart = System.currentTimeMillis();
+        }
+
+        imageFullyShownAt = -1;
+        skipEntranceAnim  = true;
+        navLoading        = true;
+        loaded            = false;
+        expectedTexture   = null;
+        openedAt          = -1;
+
+        File      file = screenshotFiles.get(newIndex);
+        Minecraft mc   = Minecraft.getInstance();
+
+        Thread.ofVirtual().start(() -> {
+            try {
+                byte[]      bytes = Files.readAllBytes(file.toPath());
+                NativeImage img   = NativeImage.read(new java.io.ByteArrayInputStream(bytes));
+                mc.execute(() -> {
+                    ScreenshotPreviewRenderer.setFullscreenTexture(img);
+                    useFullscreenTex = true;
+                    expectedTexture  = ScreenshotPreviewRenderer.getFullscreenTexture();
+                    loaded           = true;
+                    navLoading       = false;
+                    currentFileIndex = newIndex;
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+                mc.execute(() -> { navLoading = false; navAnimStart = -1; });
+            }
+        });
+    }
+
+    private void deleteCurrent() {
+        if (screenshotFiles.isEmpty() || currentFileIndex < 0) return;
+        File file = screenshotFiles.get(currentFileIndex);
+        if (file.delete()) {
+            if (parent instanceof ScreenshotGalleryScreen gallery) {
+                gallery.refreshAfterExternalChange();
+            } else if (parent instanceof ScreenshotConfigScreen config) {
+                config.refreshAfterExternalChange();
+            }
+            screenshotFiles.remove(currentFileIndex);
+            if (screenshotFiles.isEmpty()) {
+                assert this.minecraft != null;
+                this.minecraft.setScreen(parent);
+            } else {
+                if (currentFileIndex >= screenshotFiles.size()) {
+                    currentFileIndex = screenshotFiles.size() - 1;
+                }
+                reloadCurrentIndex();
+            }
+        }
+    }
+
+    private void reloadCurrentIndex() {
+        navLoading        = true;
+        loaded            = false;
+        expectedTexture   = null;
+        imageFullyShownAt = -1;
+        openedAt          = System.currentTimeMillis();
+        skipEntranceAnim  = true;
+
+        File file    = screenshotFiles.get(currentFileIndex);
+        Minecraft mc = Minecraft.getInstance();
+
+        Thread.ofVirtual().start(() -> {
+            try {
+                byte[]      bytes = Files.readAllBytes(file.toPath());
+                NativeImage img   = NativeImage.read(new java.io.ByteArrayInputStream(bytes));
+                mc.execute(() -> {
+                    ScreenshotPreviewRenderer.setFullscreenTexture(img);
+                    useFullscreenTex  = true;
+                    expectedTexture   = ScreenshotPreviewRenderer.getFullscreenTexture();
+                    loaded            = true;
+                    navLoading        = false;
+                    imageFullyShownAt = System.currentTimeMillis();
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+                mc.execute(() -> navLoading = false);
+            }
+        });
+    }
+
+    // ── UI helpers ────────────────────────────────────────────────────────────
+
+    private void drawHintText(GuiGraphics context) {
+        context.drawCenteredString(font,
+                Component.translatable("better_screenshots.fullscreen.hint"),
+                this.width / 2, this.height - 16, 0x66FFFFFF);
+    }
+
+    private float arrowAlpha() {
+        if (imageFullyShownAt < 0) return 0f;
+        boolean useAnim = ScreenshotConfig.get().uiAnimationsEnabled();
+        if (!useAnim) return 1f;
+        long elapsed = System.currentTimeMillis() - imageFullyShownAt;
+        return Math.min(1f, (float) elapsed / ARROW_FADE_MS);
+    }
+
+    private void drawActionButtons(GuiGraphics context,
+                                   int imgX, int imgY, int imgW, int imgH,
+                                   double mouseX, double mouseY) {
+        if (screenshotFiles.isEmpty() || currentFileIndex < 0) return;
+        float alpha = arrowAlpha();
+        if (alpha <= 0f) return;
+
+        int totalBtnsW = 2 * ACT_BTN_W;
+        int btnsStartX = imgX + imgW - totalBtnsW - 8;
+        int btnsY      = imgY + 8;
+
+        int copyX = btnsStartX;
+        boolean copyHov = mouseX >= copyX && mouseX <= copyX + ACT_BTN_W
+                && mouseY >= btnsY && mouseY <= btnsY + ACT_BTN_H;
+        context.blit(RenderPipelines.GUI_TEXTURED, copyHov ? ICON_COPY_H : ICON_COPY,
+                copyX, btnsY, 0f, 0f, ACT_BTN_W, ACT_BTN_H, ACT_BTN_W, ACT_BTN_H);
+
+        int delX = btnsStartX + ACT_BTN_W;
+        boolean delHov = mouseX >= delX && mouseX <= delX + ACT_BTN_W
+                && mouseY >= btnsY && mouseY <= btnsY + ACT_BTN_H;
+        context.blit(RenderPipelines.GUI_TEXTURED, delHov ? ICON_DELETE_H : ICON_DELETE,
+                delX, btnsY, 0f, 0f, ACT_BTN_W, ACT_BTN_H, ACT_BTN_W, ACT_BTN_H);
+    }
+
+    private void drawArrows(GuiGraphics context,
+                            int imgX, int imgY, int imgW, int imgH,
+                            double mouseX, double mouseY) {
+        if (screenshotFiles.isEmpty() || currentFileIndex < 0) return;
+        float alpha = arrowAlpha();
+        if (alpha <= 0f) return;
+
+        int arrowY = imgY + (imgH - ARROW_H) / 2;
+
+        boolean prevExists = hasPrev();
+        int     prevX      = imgX - ARROW_W - ARROW_MARGIN;
+        boolean prevHov    = prevExists
+                && mouseX >= prevX && mouseX <= prevX + ARROW_W
+                && mouseY >= arrowY && mouseY <= arrowY + ARROW_H;
+        drawArrowShape(context, prevX, arrowY, true, prevExists, prevHov, alpha);
+
+        boolean nextExists = hasNext();
+        int     nextX      = imgX + imgW + ARROW_MARGIN;
+        boolean nextHov    = nextExists
+                && mouseX >= nextX && mouseX <= nextX + ARROW_W
+                && mouseY >= arrowY && mouseY <= arrowY + ARROW_H;
+        drawArrowShape(context, nextX, arrowY, false, nextExists, nextHov, alpha);
+    }
+
+    private void drawArrowShape(GuiGraphics context,
+                                int x, int y,
+                                boolean pointLeft,
+                                boolean active,
+                                boolean hovered,
+                                float globalAlpha) {
+        int iconBase = active  ? (hovered ? 0xFF : 0xCC) : 0x44;
+
+        int iconAlpha = (int)(iconBase * globalAlpha);
+
+        int cx    = x + ARROW_W / 2;
+        int cy    = y + ARROW_H / 2;
+        int color = (iconAlpha << 24) | 0x00FFFFFF;
+
+        int halfSize  = 6;
+        int thickness = 2;
+        int startX    = cx - 4;
+
+        for (int i = 0; i <= halfSize; i++) {
+            int dx = pointLeft ? (halfSize - i) : i;
+            context.fill(startX + dx, cy - halfSize + i,
+                    startX + dx + thickness, cy - halfSize + i + 1, color);
+
+            if (i != halfSize) {
+                context.fill(startX + dx, cy + halfSize - i,
+                        startX + dx + thickness, cy + halfSize - i + 1, color);
+            }
+        }
+    }
+
+    private void blitWithAlpha(GuiGraphics context, ResourceLocation texId,
+                               int x, int y, int w, int h, int alphaInt) {
+        int a = Math.max(0, Math.min(255, alphaInt));
+        context.blit(RenderPipelines.GUI_TEXTURED, texId,
+                x, y, 0f, 0f, w, h, w, h,
+                (a << 24) | 0x00FFFFFF);
     }
 
     @Override
@@ -123,7 +447,7 @@ public class ScreenshotFullscreenScreen extends Screen {
     @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
         long now = System.currentTimeMillis();
-        boolean useAnim = ScreenshotConfig.get().animations;
+        boolean useAnim = ScreenshotConfig.get().uiAnimationsEnabled();
 
         // Drawing BG
         int bgAlpha;
@@ -144,6 +468,63 @@ public class ScreenshotFullscreenScreen extends Screen {
 
         context.fill(0, 0, this.width, this.height, (bgAlpha << 24));
 
+        // ── Navigation slide transition ───────────────────────────────────────
+        boolean navAnimActive = navAnimStart >= 0
+                && (!useAnim || (now - navAnimStart) < NAV_ANIM_MS);
+
+        if (navAnimActive) {
+            long  navElapsed = now - navAnimStart;
+            float navT       = useAnim
+                    ? Math.min((float) navElapsed / NAV_ANIM_MS, 1f)
+                    : 1f;
+            float easedT     = easeInOutCubic(navT);
+            int   slideAmt   = (int)(this.width * NAV_SLIDE_FRAC);
+
+            DynamicTexture refTex = (navOldTex != null && navOldTex.getPixels() != null)
+                    ? navOldTex : expectedTexture;
+            if (refTex == null || refTex.getPixels() == null) {
+                drawLoadingSpinner(context);
+                return;
+            }
+
+            int   tW      = this.width  - MARGIN * 2;
+            int   tH      = this.height - MARGIN * 2;
+            float sc      = Math.min(
+                    (float) tW / refTex.getPixels().getWidth(),
+                    (float) tH / refTex.getPixels().getHeight());
+            int targetW = (int)(refTex.getPixels().getWidth()  * sc);
+            int targetH = (int)(refTex.getPixels().getHeight() * sc);
+            int targetX = (this.width  - targetW) / 2;
+            int targetY = (this.height - targetH) / 2;
+
+            int oldOffsetX = (int)(-navDirection * slideAmt * easedT);
+            int oldAlphaI  = (int)((1f - easedT) * 255);
+            if (navOldTexId != null && navOldTex != null && navOldTex.getPixels() != null) {
+                blitWithAlpha(context, navOldTexId,
+                        targetX + oldOffsetX, targetY, targetW, targetH, oldAlphaI);
+            }
+
+            if (loaded && expectedTexture != null && expectedTexture.getPixels() != null) {
+                int newOffsetX = (int)(navDirection * slideAmt * (1f - easedT));
+                int newAlphaI  = (int)(easedT * 255);
+                blitWithAlpha(context, getTexId(),
+                        targetX + newOffsetX, targetY, targetW, targetH, newAlphaI);
+            }
+
+            if (!useAnim || navT >= 1f) {
+                navAnimStart      = -1;
+                navOldTexId       = null;
+                navOldTex         = null;
+                releaseOldTexOwned();
+                imageFullyShownAt = now;
+                openedAt          = now;
+            }
+
+            drawHintText(context);
+            super.render(context, mouseX, mouseY, delta);
+            return;
+        }
+
         // Preview loader
         if (!loaded || expectedTexture == null || expectedTexture.getPixels() == null) {
             drawLoadingSpinner(context);
@@ -151,7 +532,9 @@ public class ScreenshotFullscreenScreen extends Screen {
         }
 
         // Animation start seq
-        if (openedAt < 0) {
+        if (skipEntranceAnim) {
+            if (openedAt < 0) openedAt = now;
+        } else if (openedAt < 0) {
             initStartPosition();
             openedAt = now;
         }
@@ -185,14 +568,27 @@ public class ScreenshotFullscreenScreen extends Screen {
                 }
 
                 int imgY = (int)(lastCurY + offsetY);
-                context.blit(RenderPipelines.GUI_TEXTURED, getTexId(),
-                        lastCurX, imgY, 0f, 0f, lastCurW, lastCurH, lastCurW, lastCurH);
-
-                if (imgAlphaInt < 255) {
-                    context.fill(lastCurX, imgY, lastCurX + lastCurW, imgY + lastCurH,
-                            ((255 - imgAlphaInt) << 24));
-                }
+                blitWithAlpha(context, getTexId(),
+                        lastCurX, imgY, lastCurW, lastCurH, imgAlphaInt);
             }
+            return;
+        }
+
+        // Target-only render (skip entrance)
+        if (skipEntranceAnim) {
+            lastCurX = targetX;
+            lastCurY = targetY;
+            lastCurW = targetW;
+            lastCurH = targetH;
+            if (imageFullyShownAt < 0) imageFullyShownAt = now;
+
+            context.blit(RenderPipelines.GUI_TEXTURED, getTexId(),
+                    targetX, targetY, 0f, 0f, targetW, targetH, targetW, targetH);
+            drawArrows(context, targetX, targetY, targetW, targetH, mouseX, mouseY);
+            drawActionButtons(context, targetX, targetY, targetW, targetH, mouseX, mouseY);
+            drawHintText(context);
+
+            super.render(context, mouseX, mouseY, delta);
             return;
         }
 
@@ -216,9 +612,10 @@ public class ScreenshotFullscreenScreen extends Screen {
                 curX, curY, 0f, 0f, curW, curH, curW, curH);
 
         if (rawProgress >= 1.0f) {
-            context.drawCenteredString(font,
-                    Component.translatable("better_screenshots.fullscreen.hint"),
-                    this.width / 2, this.height - 16, 0x66FFFFFF);
+            if (imageFullyShownAt < 0) imageFullyShownAt = now;
+            drawArrows(context, targetX, targetY, targetW, targetH, mouseX, mouseY);
+            drawActionButtons(context, targetX, targetY, targetW, targetH, mouseX, mouseY);
+            drawHintText(context);
         }
 
         super.render(context, mouseX, mouseY, delta);
@@ -248,14 +645,82 @@ public class ScreenshotFullscreenScreen extends Screen {
                 Component.translatable("better_screenshots.fullscreen.loading"),
                 cx, cy + radius + 8, 0x88FFFFFF);
     }
+
+    public boolean handleNavClick(double mouseX, double mouseY) {
+        if (!loaded || expectedTexture == null || expectedTexture.getPixels() == null) return false;
+        if (closing || navLoading) return false;
+        if (screenshotFiles.isEmpty() || currentFileIndex < 0) return false;
+        if (imageFullyShownAt < 0) return false;
+
+        var img = expectedTexture;
+        if (img == null || img.getPixels() == null) return false;
+
+        int   tW     = this.width  - MARGIN * 2;
+        int   tH     = this.height - MARGIN * 2;
+        float sc     = Math.min(
+                (float) tW / img.getPixels().getWidth(),
+                (float) tH / img.getPixels().getHeight());
+        int targetW  = (int)(img.getPixels().getWidth()  * sc);
+        int targetH  = (int)(img.getPixels().getHeight() * sc);
+        int targetX  = (this.width  - targetW) / 2;
+        int targetY  = (this.height - targetH) / 2;
+
+        // 1) Action buttons
+        int totalBtnsW = 2 * ACT_BTN_W + ACT_BTN_GAP;
+        int btnsStartX = targetX + targetW - totalBtnsW - 12;
+        int btnsY      = targetY + 12;
+
+        int copyX = btnsStartX;
+        if (mouseX >= copyX && mouseX <= copyX + ACT_BTN_W
+                && mouseY >= btnsY && mouseY <= btnsY + ACT_BTN_H) {
+            ScreenshotPreviewRenderer.copyFileToClipboard(screenshotFiles.get(currentFileIndex));
+            return true;
+        }
+
+        int delX = btnsStartX + ACT_BTN_W + ACT_BTN_GAP;
+        if (mouseX >= delX && mouseX <= delX + ACT_BTN_W
+                && mouseY >= btnsY && mouseY <= btnsY + ACT_BTN_H) {
+            deleteCurrent();
+            return true;
+        }
+
+        // 2) Arrows
+        if (screenshotFiles.size() <= 1) return false;
+        int arrowY = targetY + (targetH - ARROW_H) / 2;
+
+        int prevX = targetX - ARROW_W - ARROW_MARGIN;
+        if (hasPrev()
+                && mouseX >= prevX && mouseX <= prevX + ARROW_W
+                && mouseY >= arrowY && mouseY <= arrowY + ARROW_H) {
+            navigateTo(-1);
+            return true;
+        }
+
+        int nextX = targetX + targetW + ARROW_MARGIN;
+        if (hasNext()
+                && mouseX >= nextX && mouseX <= nextX + ARROW_W
+                && mouseY >= arrowY && mouseY <= arrowY + ARROW_H) {
+            navigateTo(+1);
+            return true;
+        }
+
+        return false;
+    }
+
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (!closing && loaded && expectedTexture != null
+                && screenshotFiles.size() > 1 && currentFileIndex >= 0) {
+            if (keyCode == 263 && hasPrev()) { navigateTo(-1); return true; } // ←
+            if (keyCode == 262 && hasNext()) { navigateTo(+1); return true; } // →
+        }
+
         if (keyCode == 256) {
             if (!loaded || expectedTexture == null || expectedTexture.getPixels() == null) {
                 assert this.minecraft != null;
                 this.minecraft.setScreen(parent);
             } else {
-                if (!ScreenshotConfig.get().animations) {
+                if (!ScreenshotConfig.get().uiAnimationsEnabled()) {
                     assert this.minecraft != null;
                     this.minecraft.setScreen(parent);
                 } else {

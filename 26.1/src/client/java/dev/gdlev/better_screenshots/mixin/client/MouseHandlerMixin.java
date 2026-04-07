@@ -39,6 +39,16 @@ public class MouseHandlerMixin {
             }
         }
 
+        // Fullscreen - Handle navigation arrow clicks
+        if (mc.screen instanceof ScreenshotFullscreenScreen fullscreen) {
+            if (input.button() == 0) {
+                if (fullscreen.handleNavClick(mouseX, mouseY)) {
+                    ci.cancel();
+                    return;
+                }
+            }
+        }
+
         // Preview - works when there is no screenshot OR when the screenshot is not a gallery/fullscreen
         if (!(mc.screen instanceof ScreenshotGalleryScreen)
                 && !(mc.screen instanceof ScreenshotFullscreenScreen)

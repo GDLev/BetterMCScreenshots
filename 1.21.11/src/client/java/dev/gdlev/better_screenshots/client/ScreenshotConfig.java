@@ -16,15 +16,29 @@ public class ScreenshotConfig {
         NONE, SOFT, CLASSIC
     }
 
+    public enum AnimationsMode {
+        ON, OFF, REDUCED
+    }
+
     public Corner corner = Corner.BOTTOM_RIGHT;
     public ShutterSound shutterSound = ShutterSound.SOFT;
+    // Legacy boolean (kept for backwards compatibility with older config files)
     public boolean animations = true;
+    public AnimationsMode animationsMode = AnimationsMode.ON;
     public int previewDurationSeconds = 4;
 
     private static ScreenshotConfig instance;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Path CONFIG_PATH = FabricLoader.getInstance()
             .getConfigDir().resolve("better_screenshots.json");
+
+    public boolean uiAnimationsEnabled() {
+        return animationsMode == AnimationsMode.ON;
+    }
+
+    public boolean previewAnimationsEnabled() {
+        return animationsMode != AnimationsMode.OFF;
+    }
 
     public static ScreenshotConfig get() {
         if (instance == null) load();
@@ -43,6 +57,12 @@ public class ScreenshotConfig {
             instance = new ScreenshotConfig();
             save();
         }
+
+        // Migration / normalization
+        if (instance.animationsMode == null) {
+            instance.animationsMode = instance.animations ? AnimationsMode.ON : AnimationsMode.OFF;
+        }
+        instance.animations = instance.animationsMode == AnimationsMode.ON;
     }
 
     public static void save() {

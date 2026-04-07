@@ -8,6 +8,7 @@
   "better_screenshots.config.animations": "Animations",
   "better_screenshots.config.animations.off": "Disabled",
   "better_screenshots.config.animations.on": "Enabled",
+  "better_screenshots.config.animations.reduced": "Reduced",
   "better_screenshots.config.corner": "Position",
   "better_screenshots.config.corner.bottom_left": "Bottom Left",
   "better_screenshots.config.corner.bottom_right": "Bottom Right",

@@ -42,6 +42,8 @@ public class ScreenshotConfigScreen extends Screen {
 
     private int selectedThumbIdx = -1;
 
+    private boolean pendingExternalRefresh = false;
+
     private final int[] actionBtnX = new int[3];
     private final int[] actionBtnY = new int[3];
 
@@ -64,7 +66,10 @@ public class ScreenshotConfigScreen extends Screen {
 
     @Override
     protected void init() {
-        if (thumbFiles.isEmpty()) {
+        if (pendingExternalRefresh) {
+            pendingExternalRefresh = false;
+            loadThumbnails();
+        } else if (thumbFiles.isEmpty()) {
             loadThumbnails();
         }
 
@@ -89,14 +94,20 @@ public class ScreenshotConfigScreen extends Screen {
                         (btn, val) -> { ScreenshotConfig.get().corner = val; ScreenshotConfig.save(); }));
 
         addRenderableWidget(CycleButton.builder(
-                        (Boolean val) -> Component.translatable(val
-                                ? "better_screenshots.config.animations.on"
-                                : "better_screenshots.config.animations.off"))
-                .withValues(Boolean.TRUE, Boolean.FALSE)
-                .withInitialValue(ScreenshotConfig.get().animations)
+                        (ScreenshotConfig.AnimationsMode val) -> Component.translatable(switch (val) {
+                            case ON      -> "better_screenshots.config.animations.on";
+                            case OFF     -> "better_screenshots.config.animations.off";
+                            case REDUCED -> "better_screenshots.config.animations.reduced";
+                        }))
+                .withValues(ScreenshotConfig.AnimationsMode.values())
+                .withInitialValue(ScreenshotConfig.get().animationsMode)
                 .create(lx, ty + 14 + GAP, COL_W, BTN_H,
                         Component.translatable("better_screenshots.config.animations"),
-                        (btn, val) -> { ScreenshotConfig.get().animations = val; ScreenshotConfig.save(); }));
+                        (btn, val) -> {
+                            ScreenshotConfig.get().animationsMode = val;
+                            ScreenshotConfig.get().animations = val == ScreenshotConfig.AnimationsMode.ON;
+                            ScreenshotConfig.save();
+                        }));
 
         addRenderableWidget(CycleButton.builder(
                         (ScreenshotConfig.ShutterSound s) -> Component.translatable(switch (s) {
@@ -384,6 +395,10 @@ public class ScreenshotConfigScreen extends Screen {
                 } catch (Exception ignored) {}
             });
         }
+    }
+
+    public void refreshAfterExternalChange() {
+        pendingExternalRefresh = true;
     }
 
     private NativeImage scaleTo(NativeImage src, int tw, int th) {

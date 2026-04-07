@@ -138,7 +138,7 @@ public class ScreenshotPreviewRenderer {
                 .register(PREVIEW_ID, previewTexture);
         showFrom       = System.currentTimeMillis();
         showUntil      = showFrom + (ScreenshotConfig.get().previewDurationSeconds * 1000L);
-        flashStart     = ScreenshotConfig.get().animations ? showFrom : -1;
+        flashStart     = ScreenshotConfig.get().previewAnimationsEnabled() ? showFrom : -1;
         closeStart     = -1;
         copyFlashStart = -1;
         hoveredButton  = -1;
@@ -186,7 +186,7 @@ public class ScreenshotPreviewRenderer {
 
         if (closeStart != -1) {
             long ce = now - closeStart;
-            if (!cfg.animations || ce > CLOSE_DURATION_MS) {
+            if (!cfg.previewAnimationsEnabled() || ce > CLOSE_DURATION_MS) {
                 showUntil = -1; showFrom = -1; closeStart = -1;
                 flashStart = -1; copyFlashStart = -1;
                 return;
@@ -205,7 +205,7 @@ public class ScreenshotPreviewRenderer {
                 showUntil = -1; showFrom = -1; flashStart = -1;
                 return;
             }
-            if (cfg.animations) {
+            if (cfg.previewAnimationsEnabled()) {
                 float dropDir = switch (cfg.corner) {
                     case TOP_RIGHT,    TOP_LEFT     -> -1f;
                     case BOTTOM_RIGHT, BOTTOM_LEFT  ->  1f;
@@ -224,7 +224,7 @@ public class ScreenshotPreviewRenderer {
                 return;
             }
 
-        } else if (elapsed < ENTER_DURATION_MS && cfg.animations) {
+        } else if (elapsed < ENTER_DURATION_MS && cfg.previewAnimationsEnabled()) {
             float t = easeOutCubic((float) elapsed / ENTER_DURATION_MS);
             scale = 1.15f - 0.15f * t;
             alpha = t;
@@ -261,7 +261,7 @@ public class ScreenshotPreviewRenderer {
         }
 
         // ScreenShot animation
-        if (cfg.animations && flashStart != -1) {
+        if (cfg.previewAnimationsEnabled() && flashStart != -1) {
             long fe = now - flashStart;
             if (fe < FLASH_DURATION_MS) {
                 int fa = (int)((1f - (float) fe / FLASH_DURATION_MS) * 255);
@@ -273,7 +273,7 @@ public class ScreenshotPreviewRenderer {
         }
 
         // Copy animation
-        if (cfg.animations && copyFlashStart != -1) {
+        if (cfg.previewAnimationsEnabled() && copyFlashStart != -1) {
             long ce = now - copyFlashStart;
             if (ce < COPY_FLASH_MS) {
                 int ca = (int)((1f - (float) ce / COPY_FLASH_MS) * 110);
@@ -386,6 +386,19 @@ public class ScreenshotPreviewRenderer {
                         new ScreenshotFullscreenScreen(mc.screen);
                 screen.useCurrentTexture();
                 screen.setFromHud(true);
+
+                // Find the most-recently-modified file in screenshots dir as current
+                java.io.File dir = new java.io.File(mc.gameDirectory, "screenshots");
+                java.io.File[] found = dir.listFiles(
+                        f -> f.isFile() && f.getName().toLowerCase().endsWith(".png"));
+                java.io.File currentFile = null;
+                if (found != null && found.length > 0) {
+                    java.util.Arrays.sort(found,
+                            java.util.Comparator.comparingLong(java.io.File::lastModified).reversed());
+                    currentFile = found[0];
+                }
+                screen.initNavigationFromScreenshotsDir(currentFile);
+
                 captureBackground(() -> mc.setScreen(screen));
             });
         }

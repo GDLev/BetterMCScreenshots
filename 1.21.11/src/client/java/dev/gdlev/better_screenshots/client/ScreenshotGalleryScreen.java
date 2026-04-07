@@ -33,6 +33,8 @@ public class ScreenshotGalleryScreen extends Screen {
     private int   totalContentH  = 0;
     private int   selectedIdx    = -1;
 
+    private boolean pendingExternalRefresh = false;
+
     private final int[] actionBtnX = new int[3];
     private final int[] actionBtnY = new int[3];
     private static final int ACT_BTN_W = 8;
@@ -66,7 +68,10 @@ public class ScreenshotGalleryScreen extends Screen {
                 .bounds(8, 4, 60, 14)
                 .build());
 
-        if (files.isEmpty() && thumbIds.isEmpty()) {
+        if (pendingExternalRefresh) {
+            pendingExternalRefresh = false;
+            loadScreenshots();
+        } else if (files.isEmpty() && thumbIds.isEmpty()) {
             loadScreenshots();
         }
     }
@@ -115,6 +120,10 @@ public class ScreenshotGalleryScreen extends Screen {
 
         recalcContentH();
         refreshActionButtons();
+    }
+
+    public void refreshAfterExternalChange() {
+        pendingExternalRefresh = true;
     }
 
     private void loadThumbLimited(Minecraft mc, int idx) {
@@ -391,6 +400,18 @@ public class ScreenshotGalleryScreen extends Screen {
             context.drawCenteredString(font,
                     Component.literal(fullName), this.width / 2, textY, 0xFFCCCCCC);
         } else {
+            if (!ScreenshotConfig.get().uiAnimationsEnabled()) {
+                String clipped = fullName;
+                while (font.width(clipped + "…") > textAreaW && !clipped.isEmpty()) {
+                    clipped = clipped.substring(0, clipped.length() - 1);
+                }
+                marqueeOffset     = 0;
+                marqueePauseTimer = MARQUEE_PAUSE;
+                context.drawCenteredString(font,
+                        Component.literal(clipped + "…"), this.width / 2, textY, 0xFFCCCCCC);
+                return;
+            }
+
             if (marqueeIdx != selectedIdx) {
                 marqueeIdx        = selectedIdx;
                 marqueeOffset     = 0f;
@@ -427,6 +448,8 @@ public class ScreenshotGalleryScreen extends Screen {
     private void openFullscreen(int idx) {
         Minecraft mc = Minecraft.getInstance();
         ScreenshotFullscreenScreen screen = new ScreenshotFullscreenScreen(this);
+        // Provide the full file list so the fullscreen screen can navigate prev/next
+        screen.setNavigationContext(files, idx);
 
         mc.setScreen(screen);
 
