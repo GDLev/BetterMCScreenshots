@@ -35,6 +35,12 @@ public class ScreenshotGalleryScreen extends Screen {
 
     private boolean pendingExternalRefresh = false;
 
+    private boolean draggingScrollbar = false;
+    private double  scrollbarDragOffsetY = 0.0;
+    private static final int SCROLLBAR_VISUAL_X = 5;  // matches render()
+    private static final int SCROLLBAR_VISUAL_W = 3;  // matches render()
+    private static final int SCROLLBAR_HIT_W    = 10; // easier to grab than 3px
+
     private final int[] actionBtnX = new int[3];
     private final int[] actionBtnY = new int[3];
     private static final int ACT_BTN_W = 8;
@@ -201,6 +207,33 @@ public class ScreenshotGalleryScreen extends Screen {
     public boolean handleClick(int button, double mouseX, double mouseY) {
         if (button != 0) return false;
 
+        // Scrollbar dragging (when content is taller than viewport)
+        int bottomY  = gridBottomY();
+        int visibleH = bottomY - TOP_PAD;
+        if (totalContentH > visibleH) {
+            int trackX0 = this.width - SCROLLBAR_HIT_W;
+            int trackX1 = this.width;
+            if (mouseX >= trackX0 && mouseX <= trackX1
+                    && mouseY >= TOP_PAD && mouseY <= bottomY) {
+                int tmbH   = Math.max(16, visibleH * visibleH / totalContentH);
+                int maxSc  = totalContentH - visibleH;
+                int travel = Math.max(1, visibleH - tmbH);
+                int tmbY   = TOP_PAD + (maxSc > 0
+                        ? (int)((float) scrollOffset / maxSc * travel) : 0);
+
+                // If clicked on thumb: keep relative grab offset; else jump thumb to cursor
+                if (mouseY >= tmbY && mouseY <= tmbY + tmbH) {
+                    scrollbarDragOffsetY = mouseY - tmbY;
+                } else {
+                    scrollbarDragOffsetY = tmbH / 2.0;
+                }
+
+                draggingScrollbar = true;
+                updateScrollFromThumb(mouseY - scrollbarDragOffsetY, tmbH, visibleH, maxSc);
+                return true;
+            }
+        }
+
         if (selectedIdx >= 0) {
             for (int i = 0; i < 3; i++) {
                 if (mouseX >= actionBtnX[i] && mouseX <= actionBtnX[i] + ACT_BTN_W
@@ -215,8 +248,7 @@ public class ScreenshotGalleryScreen extends Screen {
             }
         }
 
-        int sx      = gridStartX();
-        int bottomY = gridBottomY();
+        int sx = gridStartX();
 
         for (int i = 0; i < files.size(); i++) {
             int col = i % COLS;
@@ -234,6 +266,42 @@ public class ScreenshotGalleryScreen extends Screen {
             }
         }
         return false;
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (handleClick(button, mouseX, mouseY)) return true;
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dx, double dy) {
+        if (button == 0 && draggingScrollbar) {
+            int bottomY  = gridBottomY();
+            int visibleH = bottomY - TOP_PAD;
+            int tmbH     = Math.max(16, visibleH * visibleH / totalContentH);
+            int maxSc    = Math.max(0, totalContentH - visibleH);
+            updateScrollFromThumb(mouseY - scrollbarDragOffsetY, tmbH, visibleH, maxSc);
+            return true;
+        }
+        return super.mouseDragged(mouseX, mouseY, button, dx, dy);
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (button == 0 && draggingScrollbar) {
+            draggingScrollbar = false;
+            return true;
+        }
+        return super.mouseReleased(mouseX, mouseY, button);
+    }
+
+    private void updateScrollFromThumb(double thumbTopY, int thumbH, int visibleH, int maxScroll) {
+        if (maxScroll <= 0) { scrollOffset = 0; return; }
+        int travel = Math.max(1, visibleH - thumbH);
+        double clamped = Math.max(TOP_PAD, Math.min(TOP_PAD + travel, thumbTopY));
+        double ratio = (clamped - TOP_PAD) / travel;
+        scrollOffset = (int) Math.round(ratio * maxScroll);
     }
 
     // Render
@@ -352,6 +420,10 @@ public class ScreenshotGalleryScreen extends Screen {
         boolean thumbVisible = thumbY + THUMB_H > TOP_PAD && thumbY < gridBottomY();
 
         if (thumbVisible) {
+            // Keep the action buttons clipped to the thumbnails container
+            int bottomY = gridBottomY();
+            context.enableScissor(0, TOP_PAD, this.width, bottomY);
+
             // Action buttons
             int totalBtnsW = 3 * ACT_BTN_W + 2 * ACT_BTN_GAP;
             int btnsStartX = thumbX + THUMB_W - totalBtnsW - 2;
@@ -379,6 +451,8 @@ public class ScreenshotGalleryScreen extends Screen {
                         actionBtnX[i], actionBtnY[i],
                         0f, 0f, ACT_BTN_W, ACT_BTN_H, ACT_BTN_W, ACT_BTN_H);
             }
+
+            context.disableScissor();
         } else {
             for (int i = 0; i < 3; i++) {
                 actionBtnX[i] = -100;

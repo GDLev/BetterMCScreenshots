@@ -23,14 +23,6 @@ public class MouseHandlerMixin {
         double mouseX = mc.mouseHandler.xpos() / mc.getWindow().getGuiScale();
         double mouseY = mc.mouseHandler.ypos() / mc.getWindow().getGuiScale();
 
-        // Gallery - Handle thumbnail clicks
-        if (mc.screen instanceof ScreenshotGalleryScreen gallery) {
-            if (gallery.handleClick(button, mouseX, mouseY)) {
-                ci.cancel();
-                return;
-            }
-        }
-
         // Configuration - Handle clicks on thumbnails and action buttons
         if (mc.screen instanceof ScreenshotConfigScreen config) {
             if (config.handleClick(button, mouseX, mouseY)) {
