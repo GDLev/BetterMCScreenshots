@@ -122,10 +122,33 @@ public class ScreenshotConfigScreen extends Screen {
                         Component.translatable("better_screenshots.config.sound"),
                         (btn, val) -> { ScreenshotConfig.get().shutterSound = val; ScreenshotConfig.save(); }));
 
+        addRenderableWidget(CycleButton.builder(
+                        (ScreenshotConfig.ChatNotification n) -> Component.translatable(switch (n) {
+                            case MODERN  -> "better_screenshots.config.chat.modern";
+                            case DEFAULT -> "better_screenshots.config.chat.default";
+                            case DISABLED -> "better_screenshots.config.chat.disabled";
+                        }),
+                        ScreenshotConfig.get().chatNotification)
+                .withValues(ScreenshotConfig.ChatNotification.values())
+                .create(lx, ty + 14 + GAP * 3, COL_W, BTN_H,
+                        Component.translatable("better_screenshots.config.chat"),
+                        (btn, val) -> { ScreenshotConfig.get().chatNotification = val; ScreenshotConfig.save(); }));
+
+        addRenderableWidget(CycleButton.builder(
+                        (ScreenshotConfig.FlashMode m) -> Component.translatable(switch (m) {
+                            case PREVIEW -> "better_screenshots.config.flash.preview";
+                            case SCREEN  -> "better_screenshots.config.flash.screen";
+                        }),
+                        ScreenshotConfig.get().flashMode)
+                .withValues(ScreenshotConfig.FlashMode.values())
+                .create(lx, ty + 14 + GAP * 4, COL_W, BTN_H,
+                        Component.translatable("better_screenshots.config.flash"),
+                        (btn, val) -> { ScreenshotConfig.get().flashMode = val; ScreenshotConfig.save(); }));
+
         // Preview time Slider
         double initialDuration = (ScreenshotConfig.get().previewDurationSeconds - 1.0) / 14.0;
         addRenderableWidget(new DurationSlider(
-                lx, ty + 14 + GAP * 3, COL_W, BTN_H, initialDuration));
+                lx, ty + 14 + GAP * 5, COL_W, BTN_H, initialDuration));
 
         // Back
         addRenderableWidget(Button.builder(

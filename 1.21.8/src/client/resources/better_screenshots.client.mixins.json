@@ -4,9 +4,10 @@
   "package": "dev.gdlev.better_screenshots.mixin.client",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "ScreenshotRecorderMixin",
     "MouseHandlerMixin",
-    "OptionsScreenMixin"
+    "OptionsScreenMixin",
+    "ScreenshotRecorderMixin",
+    "TitleScreenMixin"
   ],
   "injectors": {
     "defaultRequire": 1

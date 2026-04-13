@@ -6,7 +6,8 @@
   "client": [
     "ScreenshotRecorderMixin",
     "MouseHandlerMixin",
-    "OptionsScreenMixin"
+    "OptionsScreenMixin",
+    "TitleScreenMixin"
   ],
   "injectors": {
     "defaultRequire": 1

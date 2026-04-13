@@ -1,4 +1,5 @@
 /.gradle/
+/.gradle-user-home/
 /.idea/
 /build/
 
@@ -17,4 +18,17 @@
 /1.21.11/run/
 /26.1/run/
 
-/.DS_Store
+.DS_Store
+
+__pycache__/
+*.pyc
+
+.loom/
+
+*.classpath
+*.project
+.settings/
+.vscode/
+
+Thumbs.db
+desktop.ini

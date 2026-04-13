@@ -265,8 +265,12 @@ public class ScreenshotPreviewRenderer {
             long fe = now - flashStart;
             if (fe < FLASH_DURATION_MS) {
                 int fa = (int)((1f - (float) fe / FLASH_DURATION_MS) * 255);
-                context.fill(drawX, drawY, drawX + drawWidth, drawY + drawHeight,
-                        (fa << 24) | 0x00FFFFFF);
+                if (cfg.flashMode == ScreenshotConfig.FlashMode.SCREEN) {
+                    context.fill(0, 0, screenW, screenH, (fa << 24) | 0x00FFFFFF);
+                } else {
+                    context.fill(drawX, drawY, drawX + drawWidth, drawY + drawHeight,
+                            (fa << 24) | 0x00FFFFFF);
+                }
             } else {
                 flashStart = -1;
             }

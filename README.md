@@ -43,7 +43,7 @@ Don’t like the default sound? Change it to whatever* fits your vibe.
 
 New buttons and shortcuts make managing screenshots effortless.
 
-## 👀 What does it look like in reality 
+## 👀 What does it look like in reality
 
 <details>
 <summary><b>⚙️ Configuration Menu</b></summary>

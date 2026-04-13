@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "better_screenshots",
-  "version": "0.9.1+26.1-26.1.2",
+  "version": "1.1+26.1-26.1.2",
   "name": "Better ScreenShots",
   "description": "Enhance your screenshots with previews, sounds, and an in-game gallery!",
   "authors": ["GDLev"],

@@ -20,11 +20,21 @@ public class ScreenshotConfig {
         ON, OFF, REDUCED
     }
 
+    public enum ChatNotification {
+        MODERN, DEFAULT, DISABLED
+    }
+
+    public enum FlashMode {
+        PREVIEW, SCREEN
+    }
+
     public Corner corner = Corner.BOTTOM_RIGHT;
     public ShutterSound shutterSound = ShutterSound.SOFT;
     // Legacy boolean (kept for backwards compatibility with older config files)
     public boolean animations = true;
     public AnimationsMode animationsMode = AnimationsMode.ON;
+    public ChatNotification chatNotification = ChatNotification.MODERN;
+    public FlashMode flashMode = FlashMode.PREVIEW;
     public int previewDurationSeconds = 4;
 
     private static ScreenshotConfig instance;
