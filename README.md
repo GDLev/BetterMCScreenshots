@@ -48,7 +48,7 @@ New buttons and shortcuts make managing screenshots effortless.
 <details>
 <summary><b>⚙️ Configuration Menu</b></summary>
 
-![Configuration Menu](https://cdn.modrinth.com/data/oRvsIBeW/images/1b70d843592370e9dcb337afdbf4aeb0573ba665.png)
+![Configuration Menu](https://cdn.modrinth.com/data/oRvsIBeW/images/044a747e4b65e1e53c435c7b384134a9d700b5b2.png)
 
 </details>
 
