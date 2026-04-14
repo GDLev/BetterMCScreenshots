@@ -1,34 +1,45 @@
-/.gradle/
-/.gradle-user-home/
-/.idea/
-/build/
+# Gradle and Loom
+.gradle/
+.gradle-user-home/
+.loom/
+build/
+**/build/
+bin/
+out/
+.run/
+run/
+**/run/
+**/src/generated/**/.cache/
+!gradle/wrapper/gradle-wrapper.jar
 
-/1.21.8/build/
-/1.21.10/build/
-/1.21.11/build/
-/26.1/build/
+# IDEs
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/
+.settings/
+.project
+.classpath
+.factorypath
+.springBeans
+.sts4-cache
+.apt_generated
+.eclipse/
 
-/1.21.8/.gradle/
-/1.21.10/.gradle/
-/1.21.11/.gradle/
-/26.1/.gradle/
-
-/1.21.8/run/
-/1.21.10/run/
-/1.21.11/run/
-/26.1/run/
-
+# Operating System
 .DS_Store
+Thumbs.db
+desktop.ini
 
+# Python (if any)
 __pycache__/
 *.pyc
 
-.loom/
+# Java and build artifacts
+*.jar
+*.class
 
-*.classpath
-*.project
-.settings/
-.vscode/
-
-Thumbs.db
-desktop.ini
+# Mod specific
+repo/
+!**/src/**/repo/
