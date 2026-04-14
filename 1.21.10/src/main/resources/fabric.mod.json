@@ -5,20 +5,26 @@
   "name": "Better ScreenShots",
   "description": "Enhance your screenshots with previews, sounds, and an in-game gallery!",
   "authors": ["GDLev"],
-  "contact": {},
+  "contact": {
+    "homepage": "https://modrinth.com/mod/better-mc-screenshots",
+    "sources" : "https://github.com/GDLev/BetterMCScreenshots",
+    "issues" : "https://github.com/GDLev/BetterMCScreenshots/issues"
+  },
   "license": "GPL-3.0",
   "icon": "assets/better_screenshots/icon.png",
   "environment": "client",
   "entrypoints": {
-    "fabric-datagen": [
-      "dev.gdlev.better_screenshots.client.Better_screenshotsDataGenerator"
-    ],
-    "client": [
-      "dev.gdlev.better_screenshots.client.Better_screenshotsClient"
-    ],
-    "main": [
-      "dev.gdlev.better_screenshots.Better_screenshots"
-    ]
+    "fabric-datagen": ["dev.gdlev.better_screenshots.client.Better_screenshotsDataGenerator"],
+    "client": ["dev.gdlev.better_screenshots.client.Better_screenshotsClient"],
+    "main": ["dev.gdlev.better_screenshots.Better_screenshots"]
+  },
+  "custom" : {
+    "modmenu" : {
+      "links" : {
+        "modmenu.github_releases" : "https://github.com/GDLev/BetterMCScreenshots/releases",
+        "modmenu.modrinth" : "https://modrinth.com/mod/better-mc-screenshots"
+      }
+    }
   },
   "mixins": [
     "better_screenshots.mixins.json",
