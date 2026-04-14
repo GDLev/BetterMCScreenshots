@@ -43,5 +43,8 @@
   "key.better_screenshots.open_config": "Open Better Screenshots Config",
   "key.category.minecraft.category.better_screenshots": "Better Screenshots",
   "key.categories.better_screenshots": "Better Screenshots",
-  "better_screenshots.fullscreen.loading": "Loading..."
+  "better_screenshots.fullscreen.loading": "Loading...",
+  "better_screenshots.menu.settings": "Screenshot Settings",
+  "better_screenshots.menu.gallery": "Screenshot Gallery",
+  "better_screenshots.menu.screenshot": "Take a Screenshot"
 }
