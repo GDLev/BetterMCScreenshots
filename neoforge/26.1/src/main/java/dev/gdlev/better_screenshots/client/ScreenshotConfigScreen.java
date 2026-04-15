@@ -7,14 +7,15 @@ import java.nio.file.Files;
 import java.util.*;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
-import org.jspecify.annotations.NonNull;
 
 public class ScreenshotConfigScreen extends Screen {
 
@@ -29,6 +30,15 @@ public class ScreenshotConfigScreen extends Screen {
     private final List<DynamicTexture> thumbTextures = new ArrayList<>();
     private final List<File>           thumbFiles    = new ArrayList<>();
     private int screenshotCount = 0;
+
+    private int scrollOffset = 0;
+    private int maxScroll    = 0;
+    private final List<AbstractWidget> settingsWidgets = new ArrayList<>();
+    private Button doneBtn;
+    private Button galleryBtn;
+
+    private boolean draggingScrollbar = false;
+    private double  scrollbarDragOffsetY = 0.0;
 
     private static final Identifier ICON_SHOW    = Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/show.png");
     private static final Identifier ICON_SHOW_H  = Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/show_hover.png");
@@ -56,7 +66,7 @@ public class ScreenshotConfigScreen extends Screen {
     private int thumbW()     { return (COL_W - 6) / 2; }
     private int thumbH()     { return (int)(thumbW() * 9f / 16f); }
     private int thumbsH()    { return thumbH() * 2 + 4; }
-    private int panelH()     { return 28 + Math.max(GAP * 4 + BTN_H * 4 + 4, 14 + thumbsH() + 6 + BTN_H) + 24; }
+    private int panelH()     { return 240; }
     private int panelY()     { return (this.height - panelH()) / 2; }
     private int panelX()     { return this.width / 2 - COL_W - SEP / 2 - 12; }
     private int panelW()     { return COL_W * 2 + SEP + 24; }
@@ -74,14 +84,16 @@ public class ScreenshotConfigScreen extends Screen {
             loadThumbnails();
         }
 
+        settingsWidgets.clear();
+        clearWidgets();
+
         int lx = leftX();
-        int rx = rightX();
         int ty = topY();
         int by = bottomBtnY();
 
         // Settings
 
-        addRenderableWidget(CycleButton.builder(
+        settingsWidgets.add(addRenderableWidget(CycleButton.builder(
                         (ScreenshotConfig.Corner c) -> Component.translatable(switch (c) {
                             case BOTTOM_RIGHT -> "better_screenshots.config.corner.bottom_right";
                             case BOTTOM_LEFT  -> "better_screenshots.config.corner.bottom_left";
@@ -92,9 +104,9 @@ public class ScreenshotConfigScreen extends Screen {
                 .withValues(ScreenshotConfig.Corner.values())
                 .create(lx, ty + 14, COL_W, BTN_H,
                         Component.translatable("better_screenshots.config.corner"),
-                        (btn, val) -> { ScreenshotConfig.get().corner = val; ScreenshotConfig.save(); }));
+                        (btn, val) -> { ScreenshotConfig.get().corner = val; ScreenshotConfig.save(); })));
 
-        addRenderableWidget(CycleButton.builder(
+        settingsWidgets.add(addRenderableWidget(CycleButton.builder(
                         (ScreenshotConfig.AnimationsMode val) -> Component.translatable(switch (val) {
                             case ON      -> "better_screenshots.config.animations.on";
                             case OFF     -> "better_screenshots.config.animations.off";
@@ -108,9 +120,9 @@ public class ScreenshotConfigScreen extends Screen {
                             ScreenshotConfig.get().animationsMode = val;
                             ScreenshotConfig.get().animations = val == ScreenshotConfig.AnimationsMode.ON;
                             ScreenshotConfig.save();
-                        }));
+                        })));
 
-        addRenderableWidget(CycleButton.builder(
+        settingsWidgets.add(addRenderableWidget(CycleButton.builder(
                         (ScreenshotConfig.ShutterSound s) -> Component.translatable(switch (s) {
                             case NONE    -> "better_screenshots.config.sound.none";
                             case SOFT    -> "better_screenshots.config.sound.soft";
@@ -120,9 +132,9 @@ public class ScreenshotConfigScreen extends Screen {
                 .withValues(ScreenshotConfig.ShutterSound.values())
                 .create(lx, ty + 14 + GAP * 2, COL_W, BTN_H,
                         Component.translatable("better_screenshots.config.sound"),
-                        (btn, val) -> { ScreenshotConfig.get().shutterSound = val; ScreenshotConfig.save(); }));
+                        (btn, val) -> { ScreenshotConfig.get().shutterSound = val; ScreenshotConfig.save(); })));
 
-        addRenderableWidget(CycleButton.builder(
+        settingsWidgets.add(addRenderableWidget(CycleButton.builder(
                         (ScreenshotConfig.FlashMode m) -> Component.translatable(switch (m) {
                             case PREVIEW -> "better_screenshots.config.flash.preview";
                             case SCREEN  -> "better_screenshots.config.flash.screen";
@@ -131,9 +143,9 @@ public class ScreenshotConfigScreen extends Screen {
                 .withValues(ScreenshotConfig.FlashMode.values())
                 .create(lx, ty + 14 + GAP * 3, COL_W, BTN_H,
                         Component.translatable("better_screenshots.config.flash"),
-                        (btn, val) -> { ScreenshotConfig.get().flashMode = val; ScreenshotConfig.save(); }));
+                        (btn, val) -> { ScreenshotConfig.get().flashMode = val; ScreenshotConfig.save(); })));
 
-        addRenderableWidget(CycleButton.builder(
+        settingsWidgets.add(addRenderableWidget(CycleButton.builder(
                         (ScreenshotConfig.ChatNotification n) -> Component.translatable(switch (n) {
                             case MODERN  -> "better_screenshots.config.chat.modern";
                             case DEFAULT -> "better_screenshots.config.chat.default";
@@ -143,30 +155,60 @@ public class ScreenshotConfigScreen extends Screen {
                 .withValues(ScreenshotConfig.ChatNotification.values())
                 .create(lx, ty + 14 + GAP * 4, COL_W, BTN_H,
                         Component.translatable("better_screenshots.config.chat"),
-                        (btn, val) -> { ScreenshotConfig.get().chatNotification = val; ScreenshotConfig.save(); }));
+                        (btn, val) -> { ScreenshotConfig.get().chatNotification = val; ScreenshotConfig.save(); })));
 
         // Preview time Slider
         double initialDuration = (ScreenshotConfig.get().previewDurationSeconds - 1.0) / 14.0;
-        addRenderableWidget(new DurationSlider(
-                lx, ty + 14 + GAP * 5, COL_W, BTN_H, initialDuration));
+        settingsWidgets.add(addRenderableWidget(new DurationSlider(
+                lx, ty + 14 + GAP * 5, COL_W, BTN_H, initialDuration)));
+
+        // Menu Button Position
+        settingsWidgets.add(addRenderableWidget(CycleButton.builder(
+                        (ScreenshotConfig.MenuButtonPosition p) -> Component.translatable(switch (p) {
+                            case TOP_RIGHT    -> "better_screenshots.config.menu_button.top_right";
+                            case TOP_LEFT     -> "better_screenshots.config.menu_button.top_left";
+                            case BOTTOM_RIGHT -> "better_screenshots.config.menu_button.bottom_right";
+                            case BOTTOM_LEFT  -> "better_screenshots.config.menu_button.bottom_left";
+                            case DISABLED     -> "better_screenshots.config.menu_button.disabled";
+                        }),
+                        ScreenshotConfig.get().menuButtonPosition)
+                .withValues(ScreenshotConfig.MenuButtonPosition.values())
+                .create(lx, ty + 14 + GAP * 6, COL_W, BTN_H,
+                        Component.translatable("better_screenshots.config.menu_button"),
+                        (btn, val) -> { ScreenshotConfig.get().menuButtonPosition = val; ScreenshotConfig.save(); })));
 
         // Back
-        addRenderableWidget(Button.builder(
+        doneBtn = addRenderableWidget(Button.builder(
                         Component.translatable("better_screenshots.config.done"),
                         btn -> minecraft.setScreen(parent))
                 .bounds(lx, by, COL_W, BTN_H)
                 .build());
 
         // Gallery
-        addRenderableWidget(Button.builder(
+        galleryBtn = addRenderableWidget(Button.builder(
                         Component.translatable("better_screenshots.config.open_gallery"),
                         btn -> minecraft.setScreen(new ScreenshotGalleryScreen(this)))
-                .bounds(rx, by, COL_W, BTN_H)
+                .bounds(rightX(), by, COL_W, BTN_H)
                 .build());
+
+        int visibleH = by - 2 - (ty + 12);
+        int totalH   = 14 + settingsWidgets.size() * GAP + 4;
+        maxScroll = Math.max(0, totalH - visibleH);
+        scrollOffset = Math.min(scrollOffset, maxScroll);
+    }
+
+    private void updateWidgetPositions() {
+        int ty = topY();
+        for (int i = 0; i < settingsWidgets.size(); i++) {
+            AbstractWidget w = settingsWidgets.get(i);
+            w.setY(ty + 14 + i * GAP - scrollOffset);
+        }
     }
 
     @Override
-    public void extractRenderState(@NonNull GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
+    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
+        updateWidgetPositions();
+
         int tw = thumbW();
         int th = thumbH();
         int px = panelX();
@@ -290,7 +332,110 @@ public class ScreenshotConfigScreen extends Screen {
         context.centeredText(font,
                 countText, rx + COL_W / 2, by - 10, 0xFF666666);
 
-        super.extractRenderState(context, mouseX, mouseY, delta);
+        // Settings with scroll and scissor
+        int sTop = ty + 12;
+        int sBottom = by - 2;
+        int sHeight = sBottom - sTop;
+        context.enableScissor(lx, sTop, lx + COL_W + 10, sBottom);
+        for (int i = 0; i < settingsWidgets.size(); i++) {
+            AbstractWidget w = settingsWidgets.get(i);
+            w.extractRenderState(context, mouseX, mouseY, delta);
+        }
+        context.disableScissor();
+
+        // Scrollbar
+        if (maxScroll > 0) {
+            int sbX = lx + COL_W + 2;
+            int sbW = 2;
+            int sbH = Math.max(10, sHeight * sHeight / (sHeight + maxScroll));
+            int sbY = sTop + (int)((float) scrollOffset / maxScroll * (sHeight - sbH));
+            context.fill(sbX, sTop, sbX + sbW, sBottom, 0x22FFFFFF);
+            context.fill(sbX, sbY, sbX + sbW, sbY + sbH, 0x88FFFFFF);
+        }
+
+        // Fixed buttons
+        if (doneBtn != null) doneBtn.extractRenderState(context, mouseX, mouseY, delta);
+        if (galleryBtn != null) galleryBtn.extractRenderState(context, mouseX, mouseY, delta);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double hAmount, double vAmount) {
+        if (maxScroll > 0 && mouseX >= leftX() && mouseX <= leftX() + COL_W + 10) {
+            scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset - (int)(vAmount * 16)));
+            updateWidgetPositions();
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, hAmount, vAmount);
+    }
+
+    @Override
+    public boolean mouseClicked(MouseButtonEvent input, boolean consumed) {
+        updateWidgetPositions();
+        if (handleClick(input.button(), input.x(), input.y())) return true;
+
+        if (input.button() == 0 && maxScroll > 0) {
+            int lx = leftX();
+            int sTop = topY() + 12;
+            int sBottom = bottomBtnY() - 2;
+            int sHeight = sBottom - sTop;
+            int sbX = lx + COL_W + 2;
+            if (input.x() >= sbX - 2 && input.x() <= sbX + 6) {
+                int sbH = Math.max(10, sHeight * sHeight / (sHeight + maxScroll));
+                int sbY = sTop + (int)((float) scrollOffset / maxScroll * (sHeight - sbH));
+                if (input.y() >= sbY && input.y() <= sbY + sbH) {
+                    scrollbarDragOffsetY = input.y() - sbY;
+                } else {
+                    scrollbarDragOffsetY = sbH / 2.0;
+                }
+                draggingScrollbar = true;
+                updateScrollFromThumb(input.y() - scrollbarDragOffsetY, sbH, sHeight);
+                updateWidgetPositions();
+                return true;
+            }
+        }
+
+        // Only block clicks for the settings area if within the left column
+        if (input.x() >= leftX() && input.x() <= leftX() + COL_W) {
+            // Block clicks above the settings scroll area
+            if (input.y() < topY() + 12) return false;
+            // Block clicks in the tiny gap between the scroll area and the Done button
+            if (input.y() > bottomBtnY() - 2 && input.y() < bottomBtnY()) return false;
+            // Otherwise, let it through (including the area of the Done button at Y >= bottomBtnY())
+        }
+
+        return super.mouseClicked(input, consumed);
+    }
+
+    @Override
+    public boolean mouseDragged(MouseButtonEvent input, double dx, double dy) {
+        if (input.button() == 0 && draggingScrollbar) {
+            int sTop = topY() + 12;
+            int sBottom = bottomBtnY() - 2;
+            int sHeight = sBottom - sTop;
+            int sbH = Math.max(10, sHeight * sHeight / (sHeight + maxScroll));
+            updateScrollFromThumb(input.y() - scrollbarDragOffsetY, sbH, sHeight);
+            updateWidgetPositions();
+            return true;
+        }
+        return super.mouseDragged(input, dx, dy);
+    }
+
+    @Override
+    public boolean mouseReleased(MouseButtonEvent input) {
+        if (input.button() == 0 && draggingScrollbar) {
+            draggingScrollbar = false;
+            return true;
+        }
+        return super.mouseReleased(input);
+    }
+
+    private void updateScrollFromThumb(double thumbTopY, int thumbH, int visibleH) {
+        if (maxScroll <= 0) { scrollOffset = 0; return; }
+        int sTop = topY() + 12;
+        int travel = Math.max(1, visibleH - thumbH);
+        double clamped = Math.max(sTop, Math.min(sTop + travel, thumbTopY));
+        double ratio = (clamped - sTop) / travel;
+        scrollOffset = (int) Math.round(ratio * maxScroll);
     }
 
     public boolean handleClick(int button, double mouseX, double mouseY) {

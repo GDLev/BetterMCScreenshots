@@ -1,6 +1,7 @@
 package dev.gdlev.better_screenshots.mixin.client;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import dev.gdlev.better_screenshots.client.ScreenshotConfig;
 import dev.gdlev.better_screenshots.client.ScreenshotConfigScreen;
 import dev.gdlev.better_screenshots.client.ScreenshotGalleryScreen;
 import net.minecraft.client.Screenshot;
@@ -38,6 +39,9 @@ public abstract class OptionsScreenMixin extends Screen {
 
     @Inject(method = "init", at = @At("RETURN"))
     private void onInit(CallbackInfo ci) {
+        ScreenshotConfig.MenuButtonPosition pos = ScreenshotConfig.get().menuButtonPosition;
+        if (pos == ScreenshotConfig.MenuButtonPosition.DISABLED) return;
+
         settingsMenu = SpriteIconButton.builder(
                         Component.translatable("better_screenshots.menu.settings"),
                         b -> this.minecraft.setScreen(new ScreenshotConfigScreen(this)),
@@ -48,7 +52,6 @@ public abstract class OptionsScreenMixin extends Screen {
                         20, 20)
                 .withTootip()
                 .build();
-        settingsMenu.setPosition(10, this.height - 30);
 
         galleryButton = SpriteIconButton.builder(
                         Component.translatable("better_screenshots.menu.gallery"),
@@ -60,7 +63,6 @@ public abstract class OptionsScreenMixin extends Screen {
                         ICON_SIZE, ICON_SIZE)
                 .withTootip()
                 .build();
-        galleryButton.setPosition(10 + BTN_SIZE + GAP, this.height - 30);
 
         cameraButton = SpriteIconButton.builder(
                         Component.translatable("better_screenshots.menu.screenshot"),
@@ -94,7 +96,31 @@ public abstract class OptionsScreenMixin extends Screen {
                         ICON_SIZE, ICON_SIZE)
                 .withTootip()
                 .build();
-        cameraButton.setPosition(10 + 2 * (BTN_SIZE + GAP), this.height - 30);
+
+        int x, y;
+        switch (pos) {
+            case TOP_LEFT -> {
+                x = 10;
+                y = 10;
+            }
+            case TOP_RIGHT -> {
+                x = this.width - 10 - 3 * BTN_SIZE - 2 * GAP;
+                y = 10;
+            }
+            case BOTTOM_LEFT -> {
+                x = 10;
+                y = this.height - 30;
+            }
+            case BOTTOM_RIGHT -> {
+                x = this.width - 10 - 3 * BTN_SIZE - 2 * GAP;
+                y = this.height - 30;
+            }
+            default -> { return; }
+        }
+
+        settingsMenu.setPosition(x, y);
+        galleryButton.setPosition(x + BTN_SIZE + GAP, y);
+        cameraButton.setPosition(x + 2 * (BTN_SIZE + GAP), y);
 
         addRenderableWidget(cameraButton);
         addRenderableWidget(galleryButton);

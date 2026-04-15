@@ -28,6 +28,10 @@ public class ScreenshotConfig {
         PREVIEW, SCREEN
     }
 
+    public enum MenuButtonPosition {
+        TOP_RIGHT, TOP_LEFT, BOTTOM_RIGHT, BOTTOM_LEFT, DISABLED
+    }
+
     public Corner corner = Corner.BOTTOM_RIGHT;
     public ShutterSound shutterSound = ShutterSound.SOFT;
     public boolean animations = true;
@@ -35,6 +39,7 @@ public class ScreenshotConfig {
     public ChatNotification chatNotification = ChatNotification.MODERN;
     public FlashMode flashMode = FlashMode.PREVIEW;
     public int previewDurationSeconds = 4;
+    public MenuButtonPosition menuButtonPosition = MenuButtonPosition.BOTTOM_LEFT;
 
     private static ScreenshotConfig instance;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -70,6 +75,10 @@ public class ScreenshotConfig {
             instance.animationsMode = instance.animations ? AnimationsMode.ON : AnimationsMode.OFF;
         }
         instance.animations = instance.animationsMode == AnimationsMode.ON;
+
+        if (instance.menuButtonPosition == null) {
+            instance.menuButtonPosition = MenuButtonPosition.BOTTOM_LEFT;
+        }
     }
 
     public static void save() {

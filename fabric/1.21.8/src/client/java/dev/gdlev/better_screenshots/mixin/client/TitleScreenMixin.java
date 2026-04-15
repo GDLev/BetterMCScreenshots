@@ -36,7 +36,7 @@ public abstract class TitleScreenMixin extends Screen {
         int x = this.width / 2 + 104 + BTN_SIZE + GAP;
 
         galleryButton = SpriteIconButton.builder(
-                        Component.literal("Screenshot Gallery"),
+                        Component.translatable("better_screenshots.menu.gallery"),
                         b -> this.minecraft.setScreen(new ScreenshotGalleryScreen(this)),
                         true)
                 .size(BTN_SIZE, BTN_SIZE)
