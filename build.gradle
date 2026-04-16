@@ -1,7 +1,58 @@
-// Root build.gradle — wspólna konfiguracja dla wszystkich subprojektów.
-// Każda wersja MC ma swój własny build.gradle w swoim folderze.
-
 allprojects {
     group = "dev.gdlev"
-    version = "0.4"
+}
+
+def modVersion = "1.3"
+def versions = [
+        "fabric/1.21.8",
+        "fabric/1.21.10",
+        "fabric/1.21.11",
+        "fabric/26.1",
+        "neoforge/26.1"
+]
+
+def mcVersionRanges = [
+        "1.21.8" : "1.21.6-1.21.8",
+        "1.21.10": "1.21.9-1.21.10",
+        "1.21.11": "1.21.11",
+        "26.1"   : "26.1-26.1.2"
+]
+
+tasks.register('copyAssets') {
+    doLast {
+        def sourceDir = 'template/resources/assets/better_screenshots'
+
+        versions.each { v ->
+            def loader = v.tokenize('/')[0]
+
+            def sourceSet = (loader == 'neoforge') ? 'main' : 'client'
+
+            copy {
+                from sourceDir
+                into "${v}/src/${sourceSet}/resources/assets/better_screenshots"
+            }
+        }
+    }
+}
+
+tasks.register('updateModVersions') {
+    doLast {
+        versions.each { path ->
+            def mcVersion = path.tokenize('/')[1]
+            def file = file("${path}/gradle.properties")
+
+            if (file.exists()) {
+
+                def range = mcVersionRanges.getOrDefault(mcVersion, mcVersion)
+                def newValue = "${modVersion}+${range}"
+
+                def updated = file.text.replaceAll(
+                        /mod_version=.*/,
+                        "mod_version=${newValue}"
+                )
+
+                file.text = updated
+            }
+        }
+    }
 }
