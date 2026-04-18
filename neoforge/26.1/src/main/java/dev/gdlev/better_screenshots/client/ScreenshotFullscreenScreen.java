@@ -446,6 +446,12 @@ public class ScreenshotFullscreenScreen extends Screen {
         }
         context.fill(0, 0, this.width, this.height, (bgAlpha << 24));
 
+        if (loaded && expectedTexture == null) {
+            expectedTexture = useFullscreenTex
+                    ? ScreenshotPreviewRenderer.getFullscreenTexture()
+                    : ScreenshotPreviewRenderer.getPreviewTexture();
+        }
+
         // ── Navigation slide transition ───────────────────────────────────────
         boolean navAnimActive = navAnimStart >= 0
                 && (!useAnim || (now - navAnimStart) < NAV_ANIM_MS);

@@ -52,7 +52,9 @@ public class ScreenshotRecorderMixin {
 
         Screenshot.takeScreenshot(framebuffer, image -> {
             if (!fullscreenOpen) {
-                ScreenshotPreviewRenderer.setPreview(image);
+                client.execute(() -> ScreenshotPreviewRenderer.setPreview(image));
+            } else {
+                image.close();
             }
 
             if (cfg.chatNotification == ScreenshotConfig.ChatNotification.MODERN) {

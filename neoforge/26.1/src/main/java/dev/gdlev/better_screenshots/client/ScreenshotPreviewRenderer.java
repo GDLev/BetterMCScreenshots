@@ -40,9 +40,11 @@ public class ScreenshotPreviewRenderer {
 
     public static void setFullscreenTexture(NativeImage image) {
         Minecraft mc = Minecraft.getInstance();
-        if (fullscreenTexture != null) fullscreenTexture.close();
-        fullscreenTexture = new DynamicTexture(() -> "screenshot_fullscreen", image);
-        mc.getTextureManager().register(FULLSCREEN_ID, fullscreenTexture);
+        mc.execute(() -> {
+            if (fullscreenTexture != null) fullscreenTexture.close();
+            fullscreenTexture = new DynamicTexture(() -> "screenshot_fullscreen", image);
+            mc.getTextureManager().register(FULLSCREEN_ID, fullscreenTexture);
+        });
     }
 
     private static long showUntil      = -1;
@@ -137,16 +139,18 @@ public class ScreenshotPreviewRenderer {
 
 
     public static void setPreview(NativeImage image) {
-        if (previewTexture != null) previewTexture.close();
-        previewTexture = new DynamicTexture(() -> "screenshot_preview", image);
-        Minecraft.getInstance().getTextureManager()
-                .register(PREVIEW_ID, previewTexture);
-        showFrom       = System.currentTimeMillis();
-        showUntil      = showFrom + (ScreenshotConfig.get().previewDurationSeconds * 1000L);
-        flashStart     = ScreenshotConfig.get().previewAnimationsEnabled() ? showFrom : -1;
-        closeStart     = -1;
-        copyFlashStart = -1;
-        hoveredButton  = -1;
+        Minecraft.getInstance().execute(() -> {
+            if (previewTexture != null) previewTexture.close();
+            previewTexture = new DynamicTexture(() -> "screenshot_preview", image);
+            Minecraft.getInstance().getTextureManager()
+                    .register(PREVIEW_ID, previewTexture);
+            showFrom       = System.currentTimeMillis();
+            showUntil      = showFrom + (ScreenshotConfig.get().previewDurationSeconds * 1000L);
+            flashStart     = ScreenshotConfig.get().previewAnimationsEnabled() ? showFrom : -1;
+            closeStart     = -1;
+            copyFlashStart = -1;
+            hoveredButton  = -1;
+        });
     }
 
     public static void close() {
