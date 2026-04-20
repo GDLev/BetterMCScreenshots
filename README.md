@@ -48,7 +48,7 @@ New buttons and shortcuts make managing screenshots effortless.
 <details>
 <summary><b>⚙️ Configuration Menu</b></summary>
 
-![Configuration Menu](https://cdn.modrinth.com/data/oRvsIBeW/images/044a747e4b65e1e53c435c7b384134a9d700b5b2.png)
+![Configuration Menu](https://cdn.modrinth.com/data/oRvsIBeW/images/b4f41c5b8450276a87974bfbf91ddf78b7392b94.png)
 
 </details>
 
@@ -76,7 +76,7 @@ New buttons and shortcuts make managing screenshots effortless.
 <details>
 <summary><b>🎮 New Buttons in the Game Menu</b></summary>
 
-![New Buttons in The Game Menu](https://cdn.modrinth.com/data/oRvsIBeW/images/c453e8fed6e1a7b7f9decd1bf75a5a137cc189e5.png)
+![New Buttons in The Game Menu](https://cdn.modrinth.com/data/oRvsIBeW/images/0d0fb13cf9b7c6895ec6fd1c4102cf0c93dbac23.png)
 
 </details>
 
@@ -101,12 +101,15 @@ To build the project using Gradle, run the following commands in the project roo
 ```bash
 ./gradlew build            # All versions
 
-./gradlew fabric:1.21.8:build     # version Fabric 1.21.6 - 1.21.8
-./gradlew fabric:1.21.10:build    # version Fabric 1.21.9 - 1.21.10
-./gradlew fabric:1.21.11:build    # version Fabric 1.21.11
-./gradlew fabric:26.1:build       # version Fabric 26.1 - 26.1.2
+./gradlew fabric:1.21.8:build       # version Fabric 1.21.6 - 1.21.8
+./gradlew fabric:1.21.10:build      # version Fabric 1.21.9 - 1.21.10
+./gradlew fabric:1.21.11:build      # version Fabric 1.21.11
+./gradlew fabric:26.1:build         # version Fabric 26.1 - 26.1.2
 
-./gradlew neoforge:26.1:build     # version NeoForge 26.1 - 26.1.2
+./gradlew neoforge:1.21.8:build     # version NeoForge 1.21.6 - 1.21.8
+./gradlew neoforge:1.21.10:build    # version NeoForge 1.21.9 - 1.21.10
+./gradlew neoforge:1.21.11:build    # version NeoForge 1.21.11
+./gradlew neoforge:26.1:build       # version NeoForge 26.1 - 26.1.2
 ```
 
 ## ❤️ Feedback & Support
