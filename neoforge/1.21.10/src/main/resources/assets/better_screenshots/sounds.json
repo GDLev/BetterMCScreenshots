@@ -1,0 +1,14 @@
+{
+  "shutter_soft": {
+    "subtitle": "subtitles.better_screenshots.shutter",
+    "sounds": [
+      "better_screenshots:shutter_soft"
+    ]
+  },
+  "shutter_classic": {
+    "subtitle": "subtitles.better_screenshots.shutter",
+    "sounds": [
+      "better_screenshots:shutter_classic"
+    ]
+  }
+}

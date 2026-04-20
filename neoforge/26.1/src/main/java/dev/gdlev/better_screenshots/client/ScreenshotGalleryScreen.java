@@ -86,7 +86,7 @@ public class ScreenshotGalleryScreen extends Screen {
             new java.util.concurrent.Semaphore(MAX_CONCURRENT_LOADS);
 
     private void loadScreenshots() {
-        for (DynamicTexture t : thumbTextures) if (t != null) t.close();
+        for (DynamicTexture t : thumbTextures) ScreenshotPreviewRenderer.deferClose(t);
         thumbTextures.clear();
         thumbIds.clear();
         files.clear();
@@ -555,7 +555,7 @@ public class ScreenshotGalleryScreen extends Screen {
         if (file.delete()) {
             if (idx < thumbTextures.size()) {
                 DynamicTexture t = thumbTextures.get(idx);
-                if (t != null) t.close();
+                ScreenshotPreviewRenderer.deferClose(t);
             }
             files.remove(idx);
             thumbIds.remove(idx);
@@ -577,7 +577,7 @@ public class ScreenshotGalleryScreen extends Screen {
 
     @Override
     public void onClose() {
-        for (DynamicTexture t : thumbTextures) if (t != null) t.close();
+        for (DynamicTexture t : thumbTextures) ScreenshotPreviewRenderer.deferClose(t);
         minecraft.setScreen(parent);
     }
 }

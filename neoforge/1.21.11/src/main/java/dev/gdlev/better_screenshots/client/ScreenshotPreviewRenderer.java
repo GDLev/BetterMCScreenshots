@@ -28,16 +28,25 @@ public class ScreenshotPreviewRenderer {
     public static final Identifier BACKGROUND_ID =
             Identifier.fromNamespaceAndPath("better_screenshots", "screenshot_background");
 
-    private static void safeClose(DynamicTexture tex) {
+    private static final java.util.Queue<DynamicTexture> pendingClose =
+            new java.util.concurrent.ConcurrentLinkedQueue<>();
+
+    public static void flushPendingClose() {
+        DynamicTexture t;
+        while ((t = pendingClose.poll()) != null) {
+            t.close();
+        }
+    }
+
+    public static void deferClose(DynamicTexture tex) {
         if (tex == null) return;
-        // Defer closing to ensure the renderer is done with it
-        Minecraft.getInstance().execute(tex::close);
+        pendingClose.add(tex);
     }
 
     public static void captureBackground(Runnable onReady) {
         Minecraft mc = Minecraft.getInstance();
         net.minecraft.client.Screenshot.takeScreenshot(mc.getMainRenderTarget(), image -> mc.execute(() -> {
-            safeClose(backgroundTexture);
+            deferClose(backgroundTexture);
             backgroundTexture = new DynamicTexture(() -> "screenshot_background", image);
             mc.getTextureManager().register(BACKGROUND_ID, backgroundTexture);
             if (onReady != null) onReady.run();
@@ -45,9 +54,10 @@ public class ScreenshotPreviewRenderer {
     }
 
     public static void setFullscreenTexture(NativeImage image) {
-        safeClose(fullscreenTexture);
+        Minecraft mc = Minecraft.getInstance();
+        deferClose(fullscreenTexture);
         fullscreenTexture = new DynamicTexture(() -> "screenshot_fullscreen", image);
-        Minecraft.getInstance().getTextureManager().register(FULLSCREEN_ID, fullscreenTexture);
+        mc.getTextureManager().register(FULLSCREEN_ID, fullscreenTexture);
     }
 
     private static long showUntil      = -1;
@@ -98,9 +108,7 @@ public class ScreenshotPreviewRenderer {
                 byte[] bytes = Files.readAllBytes(file.toPath());
                 NativeImage img = NativeImage.read(new ByteArrayInputStream(bytes));
                 mc.execute(() -> {
-                    if (fullscreenTexture != null) fullscreenTexture.close();
-                    fullscreenTexture = new DynamicTexture(() -> "screenshot_fullscreen", img);
-                    mc.getTextureManager().register(FULLSCREEN_ID, fullscreenTexture);
+                    setFullscreenTexture(img);
                     screen.markLoaded();
                 });
             } catch (Exception e) { e.printStackTrace(); }
@@ -143,7 +151,7 @@ public class ScreenshotPreviewRenderer {
 
     public static void setPreview(NativeImage image) {
         Minecraft.getInstance().execute(() -> {
-            if (previewTexture != null) previewTexture.close();
+            deferClose(previewTexture);
             previewTexture = new DynamicTexture(() -> "screenshot_preview", image);
             Minecraft.getInstance().getTextureManager()
                     .register(PREVIEW_ID, previewTexture);

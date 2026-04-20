@@ -59,6 +59,7 @@ public class ScreenshotGalleryScreen extends Screen {
     private static final int   MARQUEE_PAUSE = 60;
 
     private boolean pendingExternalRefresh = false;
+    private int loadSessionId = 0;
 
     public ScreenshotGalleryScreen(Screen parent) {
         super(Component.translatable("better_screenshots.gallery.title"));
@@ -86,7 +87,10 @@ public class ScreenshotGalleryScreen extends Screen {
             new java.util.concurrent.Semaphore(MAX_CONCURRENT_LOADS);
 
     private void loadScreenshots() {
-        for (DynamicTexture t : thumbTextures) if (t != null) t.close();
+        loadSessionId++;
+        final int currentSession = loadSessionId;
+
+        for (DynamicTexture t : thumbTextures) ScreenshotPreviewRenderer.deferClose(t);
         thumbTextures.clear();
         thumbIds.clear();
         files.clear();
@@ -113,13 +117,13 @@ public class ScreenshotGalleryScreen extends Screen {
         int priority = Math.min(files.size(), 8);
         for (int i = 0; i < priority; i++) {
             final int idx = i;
-            Thread.ofVirtual().start(() -> loadThumbLimited(mc, idx));
+            Thread.ofVirtual().start(() -> loadThumbLimited(mc, idx, currentSession));
         }
         for (int i = priority; i < files.size(); i++) {
             final int idx = i;
             Thread.ofVirtual().start(() -> {
                 try { Thread.sleep(idx * 5L); } catch (Exception ignored) {}
-                loadThumbLimited(mc, idx);
+                loadThumbLimited(mc, idx, currentSession);
             });
         }
 
@@ -131,10 +135,12 @@ public class ScreenshotGalleryScreen extends Screen {
         pendingExternalRefresh = true;
     }
 
-    private void loadThumbLimited(Minecraft mc, int idx) {
+    private void loadThumbLimited(Minecraft mc, int idx, int session) {
         try {
             loadSemaphore.acquire();
-            loadThumb(mc, idx);
+            if (session == loadSessionId) {
+                loadThumb(mc, idx, session);
+            }
         } catch (InterruptedException ignored) {
         } finally {
             loadSemaphore.release();
@@ -145,15 +151,17 @@ public class ScreenshotGalleryScreen extends Screen {
         totalContentH = rows * (THUMB_H + THUMB_GAP);
     }
 
-    private void loadThumb(Minecraft mc, int idx) {
+    private void loadThumb(Minecraft mc, int idx, int session) {
         try (InputStream is = Files.newInputStream(files.get(idx).toPath())) {
             NativeImage img   = NativeImage.read(is);
             NativeImage thumb = scaleTo(img);
             img.close();
             mc.execute(() -> {
-                if (idx >= thumbTextures.size()) return;
-                DynamicTexture tex =
-                        new DynamicTexture(() -> "gal_" + idx, thumb);
+                if (session != loadSessionId || idx >= thumbTextures.size()) {
+                    thumb.close();
+                    return;
+                }
+                DynamicTexture tex = new DynamicTexture(() -> "gal_" + idx, thumb);
                 mc.getTextureManager().register(thumbIds.get(idx), tex);
                 thumbTextures.set(idx, tex);
             });
@@ -331,7 +339,8 @@ public class ScreenshotGalleryScreen extends Screen {
             context.fill(x - 1, y - 1, x + THUMB_W + 1, y + THUMB_H + 1, border);
 
             if (i < thumbTextures.size() && thumbTextures.get(i) != null) {
-                context.blit(RenderPipelines.GUI_TEXTURED, thumbIds.get(i),
+                context.blit(
+                        RenderPipelines.GUI_TEXTURED, thumbIds.get(i),
                         x, y, 0f, 0f, THUMB_W, THUMB_H, THUMB_W, THUMB_H, 0xFFFFFFFF);
             } else {
                 context.fill(x, y, x + THUMB_W, y + THUMB_H, 0xFF2a2a2a);
@@ -554,7 +563,7 @@ public class ScreenshotGalleryScreen extends Screen {
         if (file.delete()) {
             if (idx < thumbTextures.size()) {
                 DynamicTexture t = thumbTextures.get(idx);
-                if (t != null) t.close();
+                ScreenshotPreviewRenderer.deferClose(t);
             }
             files.remove(idx);
             thumbIds.remove(idx);
@@ -576,7 +585,7 @@ public class ScreenshotGalleryScreen extends Screen {
 
     @Override
     public void onClose() {
-        for (DynamicTexture t : thumbTextures) if (t != null) t.close();
+        for (DynamicTexture t : thumbTextures) ScreenshotPreviewRenderer.deferClose(t);
         minecraft.setScreen(parent);
     }
 }

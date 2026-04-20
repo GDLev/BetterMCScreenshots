@@ -41,6 +41,7 @@ public class Better_screenshotsClient {
     @SubscribeEvent
     public static void onRenderGui(RenderGuiEvent.Post event) {
         ScreenshotPreviewRenderer.render(event.getGuiGraphics());
+        ScreenshotPreviewRenderer.flushPendingClose();
     }
 
     @SubscribeEvent

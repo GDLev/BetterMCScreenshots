@@ -264,12 +264,12 @@ public class ScreenshotFullscreenScreen extends Screen {
         if (file.delete()) {
             if (parent instanceof ScreenshotGalleryScreen gallery) {
                 gallery.refreshAfterExternalChange();
-            } else if (parent instanceof ScreenshotConfigScreen config) {
-                config.refreshAfterExternalChange();
             }
             screenshotFiles.remove(currentFileIndex);
             if (screenshotFiles.isEmpty()) {
-                this.minecraft.setScreen(parent);
+                loaded          = false;
+                expectedTexture = null;
+                this.minecraft.execute(() -> this.minecraft.setScreen(parent));
             } else {
                 if (currentFileIndex >= screenshotFiles.size()) {
                     currentFileIndex = screenshotFiles.size() - 1;
@@ -464,17 +464,16 @@ public class ScreenshotFullscreenScreen extends Screen {
 
             DynamicTexture refTex = (navOldTex != null && navOldWidth > 0)
                     ? navOldTex : expectedTexture;
-            if (refTex == null || (refTex == navOldTex && navOldWidth <= 0) || (refTex == expectedTexture && (expectedTexture.getPixels() == null))) {
+            if (refTex == null
+                    || (refTex == navOldTex && navOldWidth <= 0)
+                    || (refTex == expectedTexture && (expectedTexture == null || expectedTexture.getPixels() == null))) {
                 drawLoadingSpinner(context);
                 return;
             }
-
             int   tW      = this.width  - MARGIN * 2;
             int   tH      = this.height - MARGIN * 2;
-
             int   imgW    = (refTex == navOldTex) ? navOldWidth  : refTex.getPixels().getWidth();
             int   imgH    = (refTex == navOldTex) ? navOldHeight : refTex.getPixels().getHeight();
-
             float sc      = Math.min((float) tW / imgW, (float) tH / imgH);
             int   targetW = (int)(imgW * sc);
             int   targetH = (int)(imgH * sc);
@@ -486,16 +485,16 @@ public class ScreenshotFullscreenScreen extends Screen {
             if (navOldTexId != null && navOldTex != null) {
                 context.blit(RenderPipelines.GUI_TEXTURED, navOldTexId,
                         targetX + oldOffsetX, targetY,
-                        0f, 0f, targetW, targetH, targetW, targetH, oldArgb);
+                        0f, 0f, targetW, targetH, targetW, targetH,
+                        oldArgb);
             }
 
             if (loaded && expectedTexture != null && expectedTexture.getPixels() != null) {
                 int newOffsetX = (int)(navDirection * slideAmt * (1f - easedT));
                 int newArgb = ((int)(easedT * 255) << 24) | 0xFFFFFF;
 
-                // Use new texture dimensions if refTex was the old one
-                int   nW = expectedTexture.getPixels().getWidth();
-                int   nH = expectedTexture.getPixels().getHeight();
+                int   nW  = expectedTexture.getPixels().getWidth();
+                int   nH  = expectedTexture.getPixels().getHeight();
                 float nSc = Math.min((float) tW / nW, (float) tH / nH);
                 int   nTW = (int)(nW * nSc);
                 int   nTH = (int)(nH * nSc);
@@ -504,7 +503,8 @@ public class ScreenshotFullscreenScreen extends Screen {
 
                 context.blit(RenderPipelines.GUI_TEXTURED, getTexId(),
                         nTX + newOffsetX, nTY,
-                        0f, 0f, nTW, nTH, nTW, nTH, newArgb);
+                        0f, 0f, nTW, nTH, nTW, nTH,
+                        newArgb);
             }
 
             if (!useAnim || navT >= 1f) {
@@ -564,7 +564,8 @@ public class ScreenshotFullscreenScreen extends Screen {
                 int imgY      = (int)(lastCurY + offsetY);
                 int imgArgb   = ((int)(imgAlpha * 255) << 24) | 0xFFFFFF;
                 context.blit(RenderPipelines.GUI_TEXTURED, getTexId(),
-                        lastCurX, imgY, 0f, 0f, lastCurW, lastCurH, lastCurW, lastCurH, imgArgb);
+                        lastCurX, imgY, 0f, 0f, lastCurW, lastCurH, lastCurW, lastCurH,
+                        imgArgb);
             }
             return;
         }
@@ -668,6 +669,7 @@ public class ScreenshotFullscreenScreen extends Screen {
         int targetX  = (this.width  - targetW) / 2;
         int targetY  = (this.height - targetH) / 2;
 
+        // 1. Sprawdzanie przycisków akcji
         int totalBtnsW = 2 * ACT_BTN_W + ACT_BTN_GAP;
         int btnsStartX = targetX + targetW - totalBtnsW - 12;
         int btnsY      = targetY + 12;
@@ -686,6 +688,7 @@ public class ScreenshotFullscreenScreen extends Screen {
             return true;
         }
 
+        // 2. Sprawdzanie strzałek (tylko jeżeli plików jest więcej niż 1)
         if (screenshotFiles.size() <= 1) return false;
 
         int arrowY   = targetY + (targetH - ARROW_H) / 2;
@@ -734,9 +737,9 @@ public class ScreenshotFullscreenScreen extends Screen {
 
         if (key == 256) { // ESC
             if (!loaded || expectedTexture == null || expectedTexture.getPixels() == null) {
-                this.minecraft.setScreen(parent);
+                this.minecraft.execute(() -> this.minecraft.setScreen(parent));
             } else if (!ScreenshotConfig.get().uiAnimationsEnabled()) {
-                this.minecraft.setScreen(parent);
+                this.minecraft.execute(() -> this.minecraft.setScreen(parent));
             } else {
                 startClose();
             }

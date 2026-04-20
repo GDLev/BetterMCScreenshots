@@ -371,36 +371,61 @@ public class ScreenshotConfigScreen extends Screen {
     @Override
     public boolean mouseClicked(MouseButtonEvent input, boolean consumed) {
         updateWidgetPositions();
-        if (handleClick(input.button(), input.x(), input.y())) return true;
 
-        if (input.button() == 0 && maxScroll > 0) {
+        double mouseX = input.x();
+        double mouseY = input.y();
+        int button = input.button();
+
+        if (doneBtn != null && doneBtn.mouseClicked(input, consumed)) {
+            return true;
+        }
+        if (galleryBtn != null && galleryBtn.mouseClicked(input, consumed)) {
+            return true;
+        }
+
+        if (handleClick(button, mouseX, mouseY)) return true;
+
+        if (button == 0 && maxScroll > 0) {
             int lx = leftX();
             int sTop = topY() + 12;
             int sBottom = bottomBtnY() - 2;
             int sHeight = sBottom - sTop;
             int sbX = lx + COL_W + 2;
-            if (input.x() >= sbX - 2 && input.x() <= sbX + 6) {
+
+            if (mouseX >= sbX - 2 && mouseX <= sbX + 6) {
                 int sbH = Math.max(10, sHeight * sHeight / (sHeight + maxScroll));
                 int sbY = sTop + (int)((float) scrollOffset / maxScroll * (sHeight - sbH));
-                if (input.y() >= sbY && input.y() <= sbY + sbH) {
-                    scrollbarDragOffsetY = input.y() - sbY;
+
+                if (mouseY >= sbY && mouseY <= sbY + sbH) {
+                    scrollbarDragOffsetY = mouseY - sbY;
                 } else {
                     scrollbarDragOffsetY = sbH / 2.0;
                 }
+
                 draggingScrollbar = true;
-                updateScrollFromThumb(input.y() - scrollbarDragOffsetY, sbH, sHeight);
+                updateScrollFromThumb(mouseY - scrollbarDragOffsetY, sbH, sHeight);
                 updateWidgetPositions();
                 return true;
             }
         }
 
-        // Only block clicks for the settings area if within the left column
-        if (input.x() >= leftX() && input.x() <= leftX() + COL_W) {
-            // Block clicks above the settings scroll area
-            if (input.y() < topY() + 12) return false;
-            // Block clicks in the tiny gap between the scroll area and the Done button
-            if (input.y() > bottomBtnY() - 2 && input.y() < bottomBtnY()) return false;
-            // Otherwise, let it through (including the area of the Done button at Y >= bottomBtnY())
+        if (mouseX >= leftX() && mouseX <= leftX() + COL_W
+                && mouseY < bottomBtnY()) {
+
+            int sTop = topY() + 12;
+            int sBottom = bottomBtnY() - 2;
+
+            if (mouseY >= sTop && mouseY <= sBottom) {
+                for (AbstractWidget w : settingsWidgets) {
+                    if (!w.visible) continue;
+
+                    if (w.mouseClicked(input, consumed)) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         return super.mouseClicked(input, consumed);
@@ -514,7 +539,7 @@ public class ScreenshotConfigScreen extends Screen {
     // thumbnail loading
 
     private void loadThumbnails() {
-        for (DynamicTexture t : thumbTextures) if (t != null) t.close();
+        for (DynamicTexture t : thumbTextures) ScreenshotPreviewRenderer.deferClose(t);
         thumbTextures.clear();
         thumbIds.clear();
         thumbFiles.clear();
@@ -601,7 +626,7 @@ public class ScreenshotConfigScreen extends Screen {
 
     @Override
     public void onClose() {
-        for (DynamicTexture t : thumbTextures) if (t != null) t.close();
+        for (DynamicTexture t : thumbTextures) ScreenshotPreviewRenderer.deferClose(t);
         minecraft.setScreen(parent);
     }
 }
