@@ -579,10 +579,6 @@ public class ScreenshotConfigScreen extends Screen {
         }
     }
 
-    public void refreshAfterExternalChange() {
-        pendingExternalRefresh = true;
-    }
-
     private NativeImage scaleTo(NativeImage src, int tw, int th) {
         float scale = Math.min((float) tw / src.getWidth(),
                 (float) th / src.getHeight());

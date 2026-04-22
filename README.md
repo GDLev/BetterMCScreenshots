@@ -101,11 +101,17 @@ To build the project using Gradle, run the following commands in the project roo
 ```bash
 ./gradlew build            # All versions
 
+./gradlew fabric:1.21:build         # version Fabric 1.21 - 1.21.1
+./gradlew fabric:1.21.2:build       # version Fabric 1.21.2 - 1.21.4
+./gradlew fabric:1.21.5:build       # version Fabric 1.21.5
 ./gradlew fabric:1.21.8:build       # version Fabric 1.21.6 - 1.21.8
 ./gradlew fabric:1.21.10:build      # version Fabric 1.21.9 - 1.21.10
 ./gradlew fabric:1.21.11:build      # version Fabric 1.21.11
 ./gradlew fabric:26.1:build         # version Fabric 26.1 - 26.1.2
 
+./gradlew neoforge:1.21:build       # version NeoForge 1.21 - 1.21.1
+./gradlew neoforge:1.21.2:build     # version NeoForge 1.21.2 - 1.21.4
+./gradlew neoforge:1.21.5:build     # version NeoForge 1.21.5
 ./gradlew neoforge:1.21.8:build     # version NeoForge 1.21.6 - 1.21.8
 ./gradlew neoforge:1.21.10:build    # version NeoForge 1.21.9 - 1.21.10
 ./gradlew neoforge:1.21.11:build    # version NeoForge 1.21.11
