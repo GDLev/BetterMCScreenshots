@@ -3,11 +3,13 @@ package dev.gdlev.better_screenshots.client;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.sounds.SoundEvents;
 import org.jspecify.annotations.NonNull;
 
 import java.io.File;
@@ -38,16 +40,23 @@ public class ScreenshotFullscreenScreen extends Screen {
     private static final int   ARROW_W            = 20;
     private static final int   ARROW_H            = 36;
     private static final int   ARROW_MARGIN       = 12;
+    private static final Identifier NAV_OLD_TEX_ID =
+            Identifier.fromNamespaceAndPath("better_screenshots", "screenshot_fullscreen_nav_old");
 
     // Action buttons
     private static final Identifier ICON_COPY     = Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/copy.png");
     private static final Identifier ICON_COPY_H   = Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/copy_hover.png");
-    private static final Identifier ICON_DELETE   = Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/close.png");
-    private static final Identifier ICON_DELETE_H = Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/close_hover.png");
+    private static final Identifier ICON_UPLOAD   = Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/upload.png");
+    private static final Identifier ICON_UPLOAD_H = Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/upload_hover.png");
+    private static final Identifier ICON_DELETE   = Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/delete.png");
+    private static final Identifier ICON_DELETE_H = Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/delete_hover.png");
 
     private static final int ACT_BTN_W   = 12;
     private static final int ACT_BTN_H   = 15;
     private static final int ACT_BTN_GAP = 0; // Brak przerwy
+    private static final long COPY_FLASH_MS = 500L;
+    private static final int UPLOAD_BAR_H = 2;
+    private static final long UPLOAD_STATE_HOLD_MS = 1400L;
 
     // ── Screen state ──────────────────────────────────────────────────────────
 
@@ -81,6 +90,18 @@ public class ScreenshotFullscreenScreen extends Screen {
 
     // Set by navigation to suppress the slide-up entrance animation
     private boolean skipEntranceAnim = false;
+
+    private enum FullscreenUploadState {
+        HIDDEN, UPLOADING, SUCCESS, ERROR
+    }
+
+    private FullscreenUploadState uploadState = FullscreenUploadState.HIDDEN;
+    private float uploadProgressTarget = 0f;
+    private float uploadProgressDisplayed = 0f;
+    private long uploadLastFrameMs = -1L;
+    private long uploadClearAtMs = 0L;
+    private float copyFlashAlpha = 0f;
+    private long copyFlashLastFrameMs = -1L;
 
     // ── Constructor ───────────────────────────────────────────────────────────
 
@@ -145,10 +166,18 @@ public class ScreenshotFullscreenScreen extends Screen {
         closeStart        = -1;
         imageFullyShownAt = -1;
         navAnimStart      = -1;
-        navOldTexId       = null;
-        navOldTex         = null;
+        clearNavOldTexture();
         skipEntranceAnim  = false;
+        resetUploadOverlay();
+        copyFlashAlpha    = 0f;
+        copyFlashLastFrameMs = -1L;
         if (loaded && expectedTexture != null) initStartPosition();
+    }
+
+    @Override
+    public void removed() {
+        clearNavOldTexture();
+        super.removed();
     }
 
     public void setFromHud(boolean value) { this.fromHud = value; }
@@ -220,8 +249,7 @@ public class ScreenshotFullscreenScreen extends Screen {
 
         boolean useAnim = ScreenshotConfig.get().uiAnimationsEnabled();
         if (useAnim) {
-            navOldTexId  = getTexId();
-            navOldTex    = expectedTexture;
+            captureNavOldTextureSnapshot();
             navDirection = direction;
             navAnimStart = System.currentTimeMillis();
         }
@@ -247,6 +275,7 @@ public class ScreenshotFullscreenScreen extends Screen {
                     loaded           = true;
                     navLoading       = false;
                     currentFileIndex = newIndex;
+                    resetUploadOverlay();
                 });
             } catch (Exception e) {
                 e.printStackTrace();
@@ -298,6 +327,7 @@ public class ScreenshotFullscreenScreen extends Screen {
                     loaded            = true;
                     navLoading        = false;
                     imageFullyShownAt = System.currentTimeMillis();
+                    resetUploadOverlay();
                 });
             } catch (Exception e) {
                 e.printStackTrace();
@@ -329,8 +359,9 @@ public class ScreenshotFullscreenScreen extends Screen {
         float alpha = arrowAlpha();
         if (alpha <= 0f) return;
 
-        // Łączna szerokość to suma szerokości obu przycisków
-        int totalBtnsW = 2 * ACT_BTN_W;
+        boolean showUploadAction = ScreenshotUploader.isUploaderEnabled();
+        int visibleButtons = showUploadAction ? 3 : 2;
+        int totalBtnsW = visibleButtons * ACT_BTN_W;
         int btnsStartX = imgX + imgW - totalBtnsW - 8; // 8px marginesu od krawędzi zdjęcia
         int btnsY      = imgY + 8;
 
@@ -342,8 +373,19 @@ public class ScreenshotFullscreenScreen extends Screen {
         context.blit(RenderPipelines.GUI_TEXTURED, copyHov ? ICON_COPY_H : ICON_COPY,
                 copyX, btnsY, 0f, 0f, ACT_BTN_W, ACT_BTN_H, ACT_BTN_W, ACT_BTN_H);
 
-        // Ikona Delete (od razu za Copy, bez przerwy)
-        int delX = btnsStartX + ACT_BTN_W;
+        int delX;
+        if (showUploadAction) {
+            int uploadX = btnsStartX + ACT_BTN_W;
+            boolean uploadHov = mouseX >= uploadX && mouseX <= uploadX + ACT_BTN_W
+                    && mouseY >= btnsY && mouseY <= btnsY + ACT_BTN_H;
+            context.blit(RenderPipelines.GUI_TEXTURED, uploadHov ? ICON_UPLOAD_H : ICON_UPLOAD,
+                    uploadX, btnsY, 0f, 0f, ACT_BTN_W, ACT_BTN_H, ACT_BTN_W, ACT_BTN_H);
+            delX = uploadX + ACT_BTN_W;
+        } else {
+            delX = btnsStartX + ACT_BTN_W;
+        }
+
+        // Ikona Delete
         boolean delHov = mouseX >= delX && mouseX <= delX + ACT_BTN_W
                 && mouseY >= btnsY && mouseY <= btnsY + ACT_BTN_H;
 
@@ -410,14 +452,21 @@ public class ScreenshotFullscreenScreen extends Screen {
     @Override
     public void extractBackground(@NonNull GuiGraphicsExtractor context,
                                   int mouseX, int mouseY, float delta) {
+        if (parent instanceof ScreenshotGalleryScreen) {
+            DynamicTexture bgTex = ScreenshotPreviewRenderer.getBackgroundTexture();
+            if (bgTex != null && bgTex.getPixels() != null) {
+            context.blit(RenderPipelines.GUI_TEXTURED, ScreenshotPreviewRenderer.BACKGROUND_ID,
+                    0, 0, 0f, 0f, this.width, this.height,
+                    this.width, this.height);
+                return;
+            }
+        }
+
         if (parent != null) {
             parent.extractBackground(context, mouseX, mouseY, delta);
             parent.extractRenderState(context, mouseX, mouseY, delta);
         } else {
-            // Render the captured game background when opened from chat
-            context.blit(RenderPipelines.GUI_TEXTURED,
-                    ScreenshotPreviewRenderer.BACKGROUND_ID,
-                    0, 0, 0f, 0f, this.width, this.height, this.width, this.height);
+            super.extractBackground(context, mouseX, mouseY, delta);
         }
     }
 
@@ -445,12 +494,6 @@ public class ScreenshotFullscreenScreen extends Screen {
             bgAlpha = (int)(0.8f * bgProg * 255);
         }
         context.fill(0, 0, this.width, this.height, (bgAlpha << 24));
-
-        if (loaded && expectedTexture == null) {
-            expectedTexture = useFullscreenTex
-                    ? ScreenshotPreviewRenderer.getFullscreenTexture()
-                    : ScreenshotPreviewRenderer.getPreviewTexture();
-        }
 
         // ── Navigation slide transition ───────────────────────────────────────
         boolean navAnimActive = navAnimStart >= 0
@@ -500,12 +543,12 @@ public class ScreenshotFullscreenScreen extends Screen {
 
             if (!useAnim || navT >= 1f) {
                 navAnimStart      = -1;
-                navOldTexId       = null;
-                navOldTex         = null;
+                clearNavOldTexture();
                 imageFullyShownAt = now;
                 openedAt          = now;
             }
 
+            drawCopyFlashFrame(context, targetX, targetY, targetW, targetH, now);
             drawHintText(context);
             super.extractRenderState(context, mouseX, mouseY, delta);
             return;
@@ -564,6 +607,8 @@ public class ScreenshotFullscreenScreen extends Screen {
 
             context.blit(RenderPipelines.GUI_TEXTURED, getTexId(),
                     targetX, targetY, 0f, 0f, targetW, targetH, targetW, targetH);
+            drawCopyFlashFrame(context, targetX, targetY, targetW, targetH, now);
+            drawUploadProgressBar(context, targetX, targetY, targetW, targetH);
             drawArrows(context, targetX, targetY, targetW, targetH, mouseX, mouseY);
             drawActionButtons(context, targetX, targetY, targetW, targetH, mouseX, mouseY);
             drawHintText(context);
@@ -594,9 +639,11 @@ public class ScreenshotFullscreenScreen extends Screen {
 
         context.blit(RenderPipelines.GUI_TEXTURED, getTexId(),
                 curX, curY, 0f, 0f, curW, curH, curW, curH);
+        drawCopyFlashFrame(context, curX, curY, curW, curH, now);
 
         if (rawProgress >= 1.0f) {
             if (imageFullyShownAt < 0) imageFullyShownAt = now;
+            drawUploadProgressBar(context, targetX, targetY, targetW, targetH);
             drawArrows(context, targetX, targetY, targetW, targetH, mouseX, mouseY);
             drawActionButtons(context, targetX, targetY, targetW, targetH, mouseX, mouseY);
             drawHintText(context);
@@ -655,20 +702,39 @@ public class ScreenshotFullscreenScreen extends Screen {
         int targetY  = (this.height - targetH) / 2;
 
         // 1. Sprawdzanie przycisków akcji
-        int totalBtnsW = 2 * ACT_BTN_W + ACT_BTN_GAP;
-        int btnsStartX = targetX + targetW - totalBtnsW - 12;
+        boolean showUploadAction = ScreenshotUploader.isUploaderEnabled();
+        int visibleButtons = showUploadAction ? 3 : 2;
+        int totalBtnsW = visibleButtons * ACT_BTN_W;
+        int btnsStartX = targetX + targetW - totalBtnsW - 8;
         int btnsY      = targetY + 12;
 
         int copyX = btnsStartX;
         if (mouseX >= copyX && mouseX <= copyX + ACT_BTN_W
                 && mouseY >= btnsY && mouseY <= btnsY + ACT_BTN_H) {
+            playActionButtonClickSound();
             ScreenshotPreviewRenderer.copyFileToClipboard(screenshotFiles.get(currentFileIndex));
+            copyFlashAlpha = 1f;
+            copyFlashLastFrameMs = -1L;
             return true;
         }
 
-        int delX = btnsStartX + ACT_BTN_W + ACT_BTN_GAP;
+        int delX;
+        if (showUploadAction) {
+            int uploadX = btnsStartX + ACT_BTN_W;
+            if (mouseX >= uploadX && mouseX <= uploadX + ACT_BTN_W
+                    && mouseY >= btnsY && mouseY <= btnsY + ACT_BTN_H) {
+                playActionButtonClickSound();
+                uploadCurrent();
+                return true;
+            }
+            delX = uploadX + ACT_BTN_W;
+        } else {
+            delX = btnsStartX + ACT_BTN_W;
+        }
+
         if (mouseX >= delX && mouseX <= delX + ACT_BTN_W
                 && mouseY >= btnsY && mouseY <= btnsY + ACT_BTN_H) {
+            playActionButtonClickSound();
             deleteCurrent();
             return true;
         }
@@ -697,6 +763,11 @@ public class ScreenshotFullscreenScreen extends Screen {
         return false;
     }
 
+    private void playActionButtonClickSound() {
+        if (minecraft == null || minecraft.getSoundManager() == null) return;
+        minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 2.0f));
+    }
+
     @Override
     public boolean keyPressed(net.minecraft.client.input.KeyEvent input) {
         int key = input.key();
@@ -718,5 +789,176 @@ public class ScreenshotFullscreenScreen extends Screen {
             return true;
         }
         return super.keyPressed(input);
+    }
+
+    private void uploadCurrent() {
+        if (!ScreenshotUploader.isUploaderEnabled()) return;
+        if (screenshotFiles.isEmpty() || currentFileIndex < 0 || currentFileIndex >= screenshotFiles.size()) return;
+        File file = screenshotFiles.get(currentFileIndex);
+        String uploadId = String.valueOf(System.nanoTime());
+        beginUploadOverlay();
+        ScreenshotUploader.uploadAsync(file, new ScreenshotUploader.Listener() {
+            @Override
+            public void onProgress(double progress) {
+                minecraft.execute(() -> updateUploadOverlay(progress));
+            }
+
+            @Override
+            public void onSuccess(String uploadedUrl) {
+                minecraft.execute(() -> {
+                    ScreenshotPreviewRenderer.registerUploadedUrl(uploadId, uploadedUrl);
+                    ScreenshotUploader.copyUrlToClipboard(uploadedUrl);
+                    ScreenshotUploader.showUploadSuccessToast();
+                    markUploadOverlaySuccess();
+                });
+            }
+
+            @Override
+            public void onError(String error) {
+                minecraft.execute(() -> {
+                    ScreenshotUploader.showUploadErrorToast(error);
+                    markUploadOverlayError();
+                });
+            }
+        });
+    }
+
+    private void resetUploadOverlay() {
+        uploadState = FullscreenUploadState.HIDDEN;
+        uploadProgressTarget = 0f;
+        uploadProgressDisplayed = 0f;
+        uploadLastFrameMs = -1L;
+        uploadClearAtMs = 0L;
+    }
+
+    private void beginUploadOverlay() {
+        uploadState = FullscreenUploadState.UPLOADING;
+        uploadProgressTarget = 0.04f;
+        uploadProgressDisplayed = 0f;
+        uploadLastFrameMs = -1L;
+        uploadClearAtMs = 0L;
+    }
+
+    private void updateUploadOverlay(double progress) {
+        uploadState = FullscreenUploadState.UPLOADING;
+        uploadProgressTarget = Math.max(0.04f, Math.min(1f, (float) progress));
+        uploadClearAtMs = 0L;
+    }
+
+    private void markUploadOverlaySuccess() {
+        uploadState = FullscreenUploadState.SUCCESS;
+        uploadProgressTarget = 1f;
+        uploadClearAtMs = System.currentTimeMillis() + UPLOAD_STATE_HOLD_MS;
+    }
+
+    private void markUploadOverlayError() {
+        uploadState = FullscreenUploadState.ERROR;
+        uploadProgressTarget = 1f;
+        uploadClearAtMs = System.currentTimeMillis() + UPLOAD_STATE_HOLD_MS;
+    }
+
+    private void drawUploadProgressBar(GuiGraphicsExtractor context, int x, int y, int w, int h) {
+        if (uploadState == FullscreenUploadState.HIDDEN) return;
+
+        long now = System.currentTimeMillis();
+        if (uploadState != FullscreenUploadState.UPLOADING && now > uploadClearAtMs) {
+            resetUploadOverlay();
+            return;
+        }
+
+        if (uploadLastFrameMs < 0L) {
+            uploadLastFrameMs = now;
+        }
+        float dt = Math.max(0f, Math.min(100f, now - uploadLastFrameMs));
+        uploadLastFrameMs = now;
+        float smoothing = 1f - (float) Math.exp(-dt / 120f);
+        uploadProgressDisplayed += (uploadProgressTarget - uploadProgressDisplayed) * smoothing;
+        if (Math.abs(uploadProgressTarget - uploadProgressDisplayed) < 0.001f) {
+            uploadProgressDisplayed = uploadProgressTarget;
+        }
+
+        int barX = x;
+        int barY = y + h - UPLOAD_BAR_H;
+        int barW = w;
+        int fillW;
+        int color;
+        switch (uploadState) {
+            case SUCCESS -> {
+                color = 0xFF34C759;
+                fillW = barW;
+            }
+            case ERROR -> {
+                color = 0xFFE74C3C;
+                fillW = barW;
+            }
+            default -> {
+                color = 0xFF42B9FF;
+                float p = Math.max(0.04f, Math.min(1f, uploadProgressDisplayed));
+                fillW = Math.max(1, (int) (barW * p));
+            }
+        }
+
+        context.fill(barX, barY, barX + barW, barY + UPLOAD_BAR_H, 0x66000000);
+        context.fill(barX, barY, barX + fillW, barY + UPLOAD_BAR_H, color);
+    }
+
+    private void drawCopyFlashFrame(GuiGraphicsExtractor context, int x, int y, int w, int h, long now) {
+        if (copyFlashAlpha <= 0f) return;
+
+        if (copyFlashLastFrameMs < 0L) {
+            copyFlashLastFrameMs = now;
+        } else {
+            float dt = Math.max(0f, Math.min(100f, now - copyFlashLastFrameMs));
+            copyFlashLastFrameMs = now;
+            copyFlashAlpha = Math.max(0f, copyFlashAlpha - (dt / (float) COPY_FLASH_MS));
+        }
+
+        if (copyFlashAlpha <= 0f) {
+            copyFlashAlpha = 0f;
+            copyFlashLastFrameMs = -1L;
+            return;
+        }
+
+        int alpha = Math.max(0, Math.min(255, (int) (copyFlashAlpha * 255f)));
+        if (alpha <= 0) return;
+
+        int thickness = 2;
+        int left = x;
+        int top = y;
+        int right = x + w;
+        int bottom = y + h;
+        if (right - left <= thickness * 2 || bottom - top <= thickness * 2) return;
+
+        int color = (alpha << 24) | 0x004499FF;
+        context.fill(left, top, right, top + thickness, color);
+        context.fill(left, bottom - thickness, right, bottom, color);
+        context.fill(left, top + thickness, left + thickness, bottom - thickness, color);
+        context.fill(right - thickness, top + thickness, right, bottom - thickness, color);
+    }
+
+    private void captureNavOldTextureSnapshot() {
+        clearNavOldTexture();
+        if (expectedTexture == null || expectedTexture.getPixels() == null) return;
+        NativeImage src = expectedTexture.getPixels();
+        if (src.getWidth() <= 0 || src.getHeight() <= 0) return;
+
+        NativeImage copy = new NativeImage(src.getWidth(), src.getHeight(), false);
+        for (int y = 0; y < src.getHeight(); y++) {
+            for (int x = 0; x < src.getWidth(); x++) {
+                copy.setPixel(x, y, src.getPixel(x, y));
+            }
+        }
+
+        navOldTex = new DynamicTexture(() -> "screenshot_fullscreen_nav_old", copy);
+        Minecraft.getInstance().getTextureManager().register(NAV_OLD_TEX_ID, navOldTex);
+        navOldTexId = NAV_OLD_TEX_ID;
+    }
+
+    private void clearNavOldTexture() {
+        if (navOldTex != null) {
+            navOldTex.close();
+            navOldTex = null;
+        }
+        navOldTexId = null;
     }
 }

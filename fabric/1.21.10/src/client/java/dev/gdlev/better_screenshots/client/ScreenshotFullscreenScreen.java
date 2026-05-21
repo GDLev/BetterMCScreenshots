@@ -1,7 +1,10 @@
 package dev.gdlev.better_screenshots.client;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.RenderPipelines;
@@ -41,12 +44,17 @@ public class ScreenshotFullscreenScreen extends Screen {
     // Action buttons
     private static final ResourceLocation ICON_COPY     = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/copy.png");
     private static final ResourceLocation ICON_COPY_H   = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/copy_hover.png");
-    private static final ResourceLocation ICON_DELETE   = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/close.png");
-    private static final ResourceLocation ICON_DELETE_H = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/close_hover.png");
+    private static final ResourceLocation ICON_UPLOAD   = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/upload.png");
+    private static final ResourceLocation ICON_UPLOAD_H = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/upload_hover.png");
+    private static final ResourceLocation ICON_DELETE   = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/delete.png");
+    private static final ResourceLocation ICON_DELETE_H = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/delete_hover.png");
 
     private static final int ACT_BTN_W   = 12;
     private static final int ACT_BTN_H   = 15;
     private static final int ACT_BTN_GAP = 0; // Brak przerwy
+    private static final long COPY_FLASH_MS = 500L;
+    private static final int UPLOAD_BAR_H = 2;
+    private static final long UPLOAD_STATE_HOLD_MS = 1400L;
 
     // ── Screen state ──────────────────────────────────────────────────────────
 
@@ -70,20 +78,30 @@ public class ScreenshotFullscreenScreen extends Screen {
     private boolean    navLoading       = false;
 
     // Slide transition bookkeeping
-    private int            navDirection   = 0;   // +1 = right/older, -1 = left/newer
-    private long           navAnimStart   = -1;
-    private ResourceLocation     navOldTexId    = null;
-    private DynamicTexture navOldTex      = null;
-    private DynamicTexture navOldTexOwned = null; // własna kopia tekstury starego obrazu
-
-    private static final ResourceLocation NAV_OLD_TEX_ID =
-            ResourceLocation.fromNamespaceAndPath("better_screenshots", "nav_old_screenshot");
+    private int            navDirection = 0;   // +1 = right/older, -1 = left/newer
+    private long           navAnimStart = -1;
+    private ResourceLocation     navOldTexId  = null;
+    private DynamicTexture navOldTex    = null;
+    private int            navOldWidth  = 0;
+    private int            navOldHeight = 0;
 
     // Arrow fade-in start timestamp
     private long imageFullyShownAt = -1;
 
     // Set by navigation to suppress the slide-up entrance animation
     private boolean skipEntranceAnim = false;
+
+    private enum FullscreenUploadState {
+        HIDDEN, UPLOADING, SUCCESS, ERROR
+    }
+
+    private FullscreenUploadState uploadState = FullscreenUploadState.HIDDEN;
+    private float uploadProgressTarget = 0f;
+    private float uploadProgressDisplayed = 0f;
+    private long uploadLastFrameMs = -1L;
+    private long uploadClearAtMs = 0L;
+    private float copyFlashAlpha = 0f;
+    private long copyFlashLastFrameMs = -1L;
 
     // ── Constructor ───────────────────────────────────────────────────────────
 
@@ -150,8 +168,10 @@ public class ScreenshotFullscreenScreen extends Screen {
         navAnimStart      = -1;
         navOldTexId       = null;
         navOldTex         = null;
-        releaseOldTexOwned();
+        navOldWidth       = 0;
+        navOldHeight      = 0;
         skipEntranceAnim  = false;
+        resetUploadOverlay();
         if (loaded && expectedTexture != null) initStartPosition();
     }
 
@@ -210,13 +230,6 @@ public class ScreenshotFullscreenScreen extends Screen {
         closeStart = System.currentTimeMillis();
     }
 
-    private void releaseOldTexOwned() {
-        if (navOldTexOwned != null) {
-            navOldTexOwned.close();
-            navOldTexOwned = null;
-        }
-    }
-
     // ── Navigation & File Management ──────────────────────────────────────────
 
     private boolean hasPrev() { return currentFileIndex > 0; }
@@ -230,32 +243,16 @@ public class ScreenshotFullscreenScreen extends Screen {
         if (newIndex < 0 || newIndex >= screenshotFiles.size()) return;
 
         boolean useAnim = ScreenshotConfig.get().uiAnimationsEnabled();
-        if (useAnim) {
-            releaseOldTexOwned();
-            DynamicTexture current = expectedTexture;
-            if (current != null && current.getPixels() != null) {
-                try {
-                    NativeImage oldPixels = current.getPixels();
-                    NativeImage copy = new NativeImage(
-                            oldPixels.format(),
-                            oldPixels.getWidth(),
-                            oldPixels.getHeight(),
-                            false);
-                    oldPixels.copyRect(copy,
-                            0, 0, 0, 0,
-                            oldPixels.getWidth(), oldPixels.getHeight(),
-                            false, false);
-                    navOldTexOwned = new DynamicTexture(() -> "nav_old_screenshot", copy);
-                    Minecraft.getInstance().getTextureManager()
-                            .register(NAV_OLD_TEX_ID, navOldTexOwned);
-                    navOldTexId = NAV_OLD_TEX_ID;
-                    navOldTex   = navOldTexOwned;
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    navOldTexId = null;
-                    navOldTex   = null;
-                }
-            }
+        if (useAnim && expectedTexture != null && expectedTexture.getPixels() != null) {
+            NativeImage currentPixels = expectedTexture.getPixels();
+            NativeImage snapshot = new NativeImage(currentPixels.getWidth(), currentPixels.getHeight(), false);
+            snapshot.copyFrom(currentPixels);
+            ScreenshotPreviewRenderer.setOldFullscreenTexture(snapshot);
+
+            navOldTexId  = ScreenshotPreviewRenderer.OLD_FULLSCREEN_ID;
+            navOldTex    = ScreenshotPreviewRenderer.getOldFullscreenTexture();
+            navOldWidth  = navOldTex.getPixels().getWidth();
+            navOldHeight = navOldTex.getPixels().getHeight();
             navDirection = direction;
             navAnimStart = System.currentTimeMillis();
         }
@@ -281,6 +278,7 @@ public class ScreenshotFullscreenScreen extends Screen {
                     loaded           = true;
                     navLoading       = false;
                     currentFileIndex = newIndex;
+                    resetUploadOverlay();
                 });
             } catch (Exception e) {
                 e.printStackTrace();
@@ -332,6 +330,7 @@ public class ScreenshotFullscreenScreen extends Screen {
                     loaded            = true;
                     navLoading        = false;
                     imageFullyShownAt = System.currentTimeMillis();
+                    resetUploadOverlay();
                 });
             } catch (Exception e) {
                 e.printStackTrace();
@@ -363,8 +362,9 @@ public class ScreenshotFullscreenScreen extends Screen {
         float alpha = arrowAlpha();
         if (alpha <= 0f) return;
 
-        // Łączna szerokość to suma szerokości obu przycisków
-        int totalBtnsW = 2 * ACT_BTN_W;
+        boolean showUploadAction = ScreenshotUploader.isUploaderEnabled();
+        int visibleButtons = showUploadAction ? 3 : 2;
+        int totalBtnsW = visibleButtons * ACT_BTN_W;
         int btnsStartX = imgX + imgW - totalBtnsW - 8; // 8px marginesu od krawędzi zdjęcia
         int btnsY      = imgY + 8;
 
@@ -376,8 +376,19 @@ public class ScreenshotFullscreenScreen extends Screen {
         context.blit(RenderPipelines.GUI_TEXTURED, copyHov ? ICON_COPY_H : ICON_COPY,
                 copyX, btnsY, 0f, 0f, ACT_BTN_W, ACT_BTN_H, ACT_BTN_W, ACT_BTN_H);
 
-        // Ikona Delete (od razu za Copy, bez przerwy)
-        int delX = btnsStartX + ACT_BTN_W;
+        int delX;
+        if (showUploadAction) {
+            int uploadX = btnsStartX + ACT_BTN_W;
+            boolean uploadHov = mouseX >= uploadX && mouseX <= uploadX + ACT_BTN_W
+                    && mouseY >= btnsY && mouseY <= btnsY + ACT_BTN_H;
+            context.blit(RenderPipelines.GUI_TEXTURED, uploadHov ? ICON_UPLOAD_H : ICON_UPLOAD,
+                    uploadX, btnsY, 0f, 0f, ACT_BTN_W, ACT_BTN_H, ACT_BTN_W, ACT_BTN_H);
+            delX = uploadX + ACT_BTN_W;
+        } else {
+            delX = btnsStartX + ACT_BTN_W;
+        }
+
+        // Ikona Delete
         boolean delHov = mouseX >= delX && mouseX <= delX + ACT_BTN_W
                 && mouseY >= btnsY && mouseY <= btnsY + ACT_BTN_H;
 
@@ -443,7 +454,17 @@ public class ScreenshotFullscreenScreen extends Screen {
 
     @Override
     public void renderBackground(GuiGraphics context,
-                                 int mouseX, int mouseY, float delta) {
+                                  int mouseX, int mouseY, float delta) {
+        if (parent instanceof ScreenshotGalleryScreen) {
+            DynamicTexture bgTex = ScreenshotPreviewRenderer.getBackgroundTexture();
+            if (bgTex != null && bgTex.getPixels() != null) {
+            context.blit(RenderPipelines.GUI_TEXTURED, ScreenshotPreviewRenderer.BACKGROUND_ID,
+                    0, 0, 0f, 0f, this.width, this.height,
+                    this.width, this.height);
+                return;
+            }
+        }
+
         if (parent != null) {
             parent.renderBackground(context, mouseX, mouseY, delta);
             parent.render(context, mouseX, mouseY, delta);
@@ -454,7 +475,7 @@ public class ScreenshotFullscreenScreen extends Screen {
 
     @Override
     public void render(GuiGraphics context,
-                       int mouseX, int mouseY, float delta) {
+                                   int mouseX, int mouseY, float delta) {
         long    now     = System.currentTimeMillis();
         boolean useAnim = ScreenshotConfig.get().uiAnimationsEnabled();
 
@@ -489,45 +510,60 @@ public class ScreenshotFullscreenScreen extends Screen {
             float easedT     = easeInOutCubic(navT);
             int   slideAmt   = (int)(this.width * NAV_SLIDE_FRAC);
 
-            DynamicTexture refTex = (navOldTex != null && navOldTex.getPixels() != null)
+            DynamicTexture refTex = (navOldTex != null && navOldWidth > 0)
                     ? navOldTex : expectedTexture;
-            if (refTex == null || refTex.getPixels() == null) {
+            if (refTex == null
+                    || (refTex == navOldTex && navOldWidth <= 0)
+                    || (refTex == expectedTexture && (expectedTexture == null || expectedTexture.getPixels() == null))) {
                 drawLoadingSpinner(context);
                 return;
             }
             int   tW      = this.width  - MARGIN * 2;
             int   tH      = this.height - MARGIN * 2;
-            float sc      = Math.min(
-                    (float) tW / refTex.getPixels().getWidth(),
-                    (float) tH / refTex.getPixels().getHeight());
-            int   targetW = (int)(refTex.getPixels().getWidth()  * sc);
-            int   targetH = (int)(refTex.getPixels().getHeight() * sc);
+            int   imgW    = (refTex == navOldTex) ? navOldWidth  : refTex.getPixels().getWidth();
+            int   imgH    = (refTex == navOldTex) ? navOldHeight : refTex.getPixels().getHeight();
+            float sc      = Math.min((float) tW / imgW, (float) tH / imgH);
+            int   targetW = (int)(imgW * sc);
+            int   targetH = (int)(imgH * sc);
             int   targetX = (this.width  - targetW) / 2;
             int   targetY = (this.height - targetH) / 2;
 
             int oldOffsetX = (int)(-navDirection * slideAmt * easedT);
-            int oldAlpha   = (int)((1f - easedT) * 255);
-            if (navOldTexId != null && navOldTex != null && navOldTex.getPixels() != null) {
+            int oldArgb = ((int)((1f - easedT) * 255) << 24) | 0xFFFFFF;
+            if (navOldTexId != null && navOldTex != null) {
                 context.blit(RenderPipelines.GUI_TEXTURED, navOldTexId,
                         targetX + oldOffsetX, targetY,
                         0f, 0f, targetW, targetH, targetW, targetH,
-                        (oldAlpha << 24) | 0x00FFFFFF);
+                        oldArgb);
             }
 
             if (loaded && expectedTexture != null && expectedTexture.getPixels() != null) {
                 int newOffsetX = (int)(navDirection * slideAmt * (1f - easedT));
-                int newAlpha   = (int)(easedT * 255);
+                int newArgb = ((int)(easedT * 255) << 24) | 0xFFFFFF;
+
+                int   nW  = expectedTexture.getPixels().getWidth();
+                int   nH  = expectedTexture.getPixels().getHeight();
+                float nSc = Math.min((float) tW / nW, (float) tH / nH);
+                int   nTW = (int)(nW * nSc);
+                int   nTH = (int)(nH * nSc);
+                int   nTX = (this.width  - nTW) / 2;
+                int   nTY = (this.height - nTH) / 2;
+
                 context.blit(RenderPipelines.GUI_TEXTURED, getTexId(),
-                        targetX + newOffsetX, targetY,
-                        0f, 0f, targetW, targetH, targetW, targetH,
-                        (newAlpha << 24) | 0x00FFFFFF);
+                        nTX + newOffsetX, nTY,
+                        0f, 0f, nTW, nTH, nTW, nTH,
+                        newArgb);
             }
 
+            drawCopyFlashFrame(context, targetX, targetY, targetW, targetH, now);
+
             if (!useAnim || navT >= 1f) {
+                ScreenshotPreviewRenderer.deferClose(navOldTex);
                 navAnimStart      = -1;
                 navOldTexId       = null;
                 navOldTex         = null;
-                releaseOldTexOwned();
+                navOldWidth       = 0;
+                navOldHeight      = 0;
                 imageFullyShownAt = now;
                 openedAt          = now;
             }
@@ -538,7 +574,7 @@ public class ScreenshotFullscreenScreen extends Screen {
         }
 
         // ── No transition: normal loading or not-yet-loaded ───────────────────
-        if (!loaded || expectedTexture == null || expectedTexture.getPixels() == null) {
+        if (!loaded || expectedTexture == null) {
             drawLoadingSpinner(context);
             return;
         }
@@ -561,7 +597,6 @@ public class ScreenshotFullscreenScreen extends Screen {
             if (exitElapsed <= EXIT_DURATION_MS) {
                 float overallT  = (float) exitElapsed / EXIT_DURATION_MS;
                 float imgAlpha  = Math.max(0f, 1f - overallT * 1.4f);
-                int   imgAlphaI = (int)(imgAlpha * 255);
 
                 float offsetY;
                 if (exitElapsed < BOUNCE_UP_MS) {
@@ -573,10 +608,12 @@ public class ScreenshotFullscreenScreen extends Screen {
                     offsetY = -BOUNCE_HEIGHT + EXIT_DROP * easeInCubic(tDrop);
                 }
 
-                int imgY = (int)(lastCurY + offsetY);
+                int imgY      = (int)(lastCurY + offsetY);
+                int imgAlphaI = (int)(imgAlpha * 255);
+                int imgArgb   = ((int)(Math.max(0f, Math.min(1f, imgAlphaI / 255f)) * 255) << 24) | 0xFFFFFF;
                 context.blit(RenderPipelines.GUI_TEXTURED, getTexId(),
                         lastCurX, imgY, 0f, 0f, lastCurW, lastCurH, lastCurW, lastCurH,
-                        (imgAlphaI << 24) | 0x00FFFFFF);
+                        imgArgb);
             }
             return;
         }
@@ -589,11 +626,12 @@ public class ScreenshotFullscreenScreen extends Screen {
             if (imageFullyShownAt < 0) imageFullyShownAt = now;
 
             context.blit(RenderPipelines.GUI_TEXTURED, getTexId(),
-                    targetX, targetY, 0f, 0f, targetW, targetH, targetW, targetH);
+                    targetX, targetY, 0f, 0f, targetW, targetH, targetW, targetH, 0xFFFFFFFF);
+            drawCopyFlashFrame(context, targetX, targetY, targetW, targetH, now);
+            drawUploadProgressBar(context, targetX, targetY, targetW, targetH);
             drawArrows(context, targetX, targetY, targetW, targetH, mouseX, mouseY);
             drawActionButtons(context, targetX, targetY, targetW, targetH, mouseX, mouseY);
             drawHintText(context);
-
             super.render(context, mouseX, mouseY, delta);
             return;
         }
@@ -619,15 +657,16 @@ public class ScreenshotFullscreenScreen extends Screen {
         lastCurH = targetH;
 
         context.blit(RenderPipelines.GUI_TEXTURED, getTexId(),
-                curX, curY, 0f, 0f, curW, curH, curW, curH);
+                curX, curY, 0f, 0f, curW, curH, curW, curH, 0xFFFFFFFF);
+        drawCopyFlashFrame(context, curX, curY, curW, curH, now);
 
         if (rawProgress >= 1.0f) {
             if (imageFullyShownAt < 0) imageFullyShownAt = now;
+            drawUploadProgressBar(context, targetX, targetY, targetW, targetH);
             drawArrows(context, targetX, targetY, targetW, targetH, mouseX, mouseY);
             drawActionButtons(context, targetX, targetY, targetW, targetH, mouseX, mouseY);
             drawHintText(context);
         }
-
         super.render(context, mouseX, mouseY, delta);
     }
 
@@ -681,20 +720,39 @@ public class ScreenshotFullscreenScreen extends Screen {
         int targetY  = (this.height - targetH) / 2;
 
         // 1. Sprawdzanie przycisków akcji
-        int totalBtnsW = 2 * ACT_BTN_W + ACT_BTN_GAP;
-        int btnsStartX = targetX + targetW - totalBtnsW - 12;
-        int btnsY      = targetY + 12;
+        boolean showUploadAction = ScreenshotUploader.isUploaderEnabled();
+        int visibleButtons = showUploadAction ? 3 : 2;
+        int totalBtnsW = visibleButtons * ACT_BTN_W;
+        int btnsStartX = targetX + targetW - totalBtnsW - 8;
+        int btnsY      = targetY + 8;
 
         int copyX = btnsStartX;
         if (mouseX >= copyX && mouseX <= copyX + ACT_BTN_W
                 && mouseY >= btnsY && mouseY <= btnsY + ACT_BTN_H) {
+            playActionButtonClickSound();
             ScreenshotPreviewRenderer.copyFileToClipboard(screenshotFiles.get(currentFileIndex));
+            copyFlashAlpha = 1f;
+            copyFlashLastFrameMs = -1L;
             return true;
         }
 
-        int delX = btnsStartX + ACT_BTN_W + ACT_BTN_GAP;
+        int delX;
+        if (showUploadAction) {
+            int uploadX = btnsStartX + ACT_BTN_W;
+            if (mouseX >= uploadX && mouseX <= uploadX + ACT_BTN_W
+                    && mouseY >= btnsY && mouseY <= btnsY + ACT_BTN_H) {
+                playActionButtonClickSound();
+                uploadCurrent();
+                return true;
+            }
+            delX = uploadX + ACT_BTN_W;
+        } else {
+            delX = btnsStartX + ACT_BTN_W;
+        }
+
         if (mouseX >= delX && mouseX <= delX + ACT_BTN_W
                 && mouseY >= btnsY && mouseY <= btnsY + ACT_BTN_H) {
+            playActionButtonClickSound();
             deleteCurrent();
             return true;
         }
@@ -724,6 +782,14 @@ public class ScreenshotFullscreenScreen extends Screen {
     }
 
     @Override
+    public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent input, boolean consumed) {
+        if (input.button() == 0 && handleNavClick(input.x(), input.y())) {
+            return true;
+        }
+        return super.mouseClicked(input, consumed);
+    }
+
+    @Override
     public boolean keyPressed(net.minecraft.client.input.KeyEvent input) {
         int key = input.key();
 
@@ -744,5 +810,168 @@ public class ScreenshotFullscreenScreen extends Screen {
             return true;
         }
         return super.keyPressed(input);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (closing || navLoading) return false;
+        if (scrollY > 0) {
+            if (hasPrev()) navigateTo(-1);
+            return true;
+        } else if (scrollY < 0) {
+            if (hasNext()) navigateTo(+1);
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    }
+
+    private void playActionButtonClickSound() {
+        if (minecraft == null || minecraft.getSoundManager() == null) return;
+        minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 2.0f));
+    }
+
+    private void uploadCurrent() {
+        if (!ScreenshotUploader.isUploaderEnabled()) return;
+        if (screenshotFiles.isEmpty() || currentFileIndex < 0 || currentFileIndex >= screenshotFiles.size()) return;
+        File file = screenshotFiles.get(currentFileIndex);
+        String uploadId = String.valueOf(System.nanoTime());
+        beginUploadOverlay();
+        ScreenshotUploader.uploadAsync(file, new ScreenshotUploader.Listener() {
+            @Override
+            public void onProgress(double progress) {
+                minecraft.execute(() -> updateUploadOverlay(progress));
+            }
+
+            @Override
+            public void onSuccess(String uploadedUrl) {
+                minecraft.execute(() -> {
+                    ScreenshotPreviewRenderer.registerUploadedUrl(uploadId, uploadedUrl);
+                    ScreenshotUploader.copyUrlToClipboard(uploadedUrl);
+                    ScreenshotUploader.showUploadSuccessToast();
+                    markUploadOverlaySuccess();
+                });
+            }
+
+            @Override
+            public void onError(String error) {
+                minecraft.execute(() -> {
+                    ScreenshotUploader.showUploadErrorToast(error);
+                    markUploadOverlayError();
+                });
+            }
+        });
+    }
+
+    private void resetUploadOverlay() {
+        uploadState = FullscreenUploadState.HIDDEN;
+        uploadProgressTarget = 0f;
+        uploadProgressDisplayed = 0f;
+        uploadLastFrameMs = -1L;
+        uploadClearAtMs = 0L;
+    }
+
+    private void beginUploadOverlay() {
+        uploadState = FullscreenUploadState.UPLOADING;
+        uploadProgressTarget = 0.04f;
+        uploadProgressDisplayed = 0f;
+        uploadLastFrameMs = -1L;
+        uploadClearAtMs = 0L;
+    }
+
+    private void updateUploadOverlay(double progress) {
+        uploadState = FullscreenUploadState.UPLOADING;
+        uploadProgressTarget = Math.max(0.04f, Math.min(1f, (float) progress));
+        uploadClearAtMs = 0L;
+    }
+
+    private void markUploadOverlaySuccess() {
+        uploadState = FullscreenUploadState.SUCCESS;
+        uploadProgressTarget = 1f;
+        uploadClearAtMs = System.currentTimeMillis() + UPLOAD_STATE_HOLD_MS;
+    }
+
+    private void markUploadOverlayError() {
+        uploadState = FullscreenUploadState.ERROR;
+        uploadProgressTarget = 1f;
+        uploadClearAtMs = System.currentTimeMillis() + UPLOAD_STATE_HOLD_MS;
+    }
+
+    private void drawUploadProgressBar(GuiGraphics context, int x, int y, int w, int h) {
+        if (uploadState == FullscreenUploadState.HIDDEN) return;
+
+        long now = System.currentTimeMillis();
+        if (uploadState != FullscreenUploadState.UPLOADING && now > uploadClearAtMs) {
+            resetUploadOverlay();
+            return;
+        }
+
+        if (uploadLastFrameMs < 0L) {
+            uploadLastFrameMs = now;
+        }
+        float dt = Math.max(0f, Math.min(100f, now - uploadLastFrameMs));
+        uploadLastFrameMs = now;
+        float smoothing = 1f - (float) Math.exp(-dt / 120f);
+        uploadProgressDisplayed += (uploadProgressTarget - uploadProgressDisplayed) * smoothing;
+        if (Math.abs(uploadProgressTarget - uploadProgressDisplayed) < 0.001f) {
+            uploadProgressDisplayed = uploadProgressTarget;
+        }
+
+        int barX = x;
+        int barY = y + h - UPLOAD_BAR_H;
+        int barW = w;
+        int fillW;
+        int color;
+        switch (uploadState) {
+            case SUCCESS -> {
+                color = 0xFF34C759;
+                fillW = barW;
+            }
+            case ERROR -> {
+                color = 0xFFE74C3C;
+                fillW = barW;
+            }
+            default -> {
+                color = 0xFF42B9FF;
+                float p = Math.max(0.04f, Math.min(1f, uploadProgressDisplayed));
+                fillW = Math.max(1, (int) (barW * p));
+            }
+        }
+
+        context.fill(barX, barY, barX + barW, barY + UPLOAD_BAR_H, 0x66000000);
+        context.fill(barX, barY, barX + fillW, barY + UPLOAD_BAR_H, color);
+    }
+
+    private void drawCopyFlashFrame(GuiGraphics context, int x, int y, int w, int h, long now) {
+        if (copyFlashAlpha <= 0f) return;
+
+        if (copyFlashLastFrameMs < 0L) {
+            copyFlashLastFrameMs = now;
+        } else {
+            float dt = Math.max(0f, Math.min(100f, now - copyFlashLastFrameMs));
+            copyFlashLastFrameMs = now;
+            copyFlashAlpha = Math.max(0f, copyFlashAlpha - (dt / (float) COPY_FLASH_MS));
+        }
+
+        if (copyFlashAlpha <= 0f) {
+            copyFlashAlpha = 0f;
+            copyFlashLastFrameMs = -1L;
+            return;
+        }
+
+        int alpha = Math.max(0, Math.min(255, (int) (copyFlashAlpha * 255f)));
+        if (alpha <= 0) return;
+
+        int thickness = 2;
+        int left = x;
+        int top = y;
+        int right = x + w;
+        int bottom = y + h;
+        if (right - left <= thickness * 2 || bottom - top <= thickness * 2) return;
+
+        int color = (alpha << 24) | 0x004499FF;
+        context.fill(left, top, right, top + thickness, color);
+        context.fill(left, bottom - thickness, right, bottom, color);
+        context.fill(left, top + thickness, left + thickness, bottom - thickness, color);
+        context.fill(right - thickness, top + thickness, right, bottom - thickness, color);
     }
 }

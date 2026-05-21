@@ -2,15 +2,12 @@ package dev.gdlev.better_screenshots.client;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
-
-import java.io.File;
-import java.io.ByteArrayInputStream;
-import java.nio.file.Files;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class ScreenshotPreviewRenderer {
 
@@ -24,30 +21,58 @@ public class ScreenshotPreviewRenderer {
 
     public static DynamicTexture getFullscreenTexture() { return fullscreenTexture; }
 
+    private static DynamicTexture oldFullscreenTexture;
+    public static final ResourceLocation OLD_FULLSCREEN_ID =
+            ResourceLocation.fromNamespaceAndPath("better_screenshots", "screenshot_fullscreen_old");
+    public static DynamicTexture getOldFullscreenTexture() { return oldFullscreenTexture; }
+
     private static DynamicTexture backgroundTexture;
     public static final ResourceLocation BACKGROUND_ID =
             ResourceLocation.fromNamespaceAndPath("better_screenshots", "screenshot_background");
 
+    public static DynamicTexture getBackgroundTexture() { return backgroundTexture; }
+
     private static final java.util.Queue<DynamicTexture> pendingClose =
             new java.util.concurrent.ConcurrentLinkedQueue<>();
-
-    public static void flushPendingClose() {
-        DynamicTexture t;
-        while ((t = pendingClose.poll()) != null) {
-            t.close();
-        }
-    }
 
     public static void deferClose(DynamicTexture tex) {
         if (tex == null) return;
         pendingClose.add(tex);
     }
 
+    public static void flushPendingClose() {
+        DynamicTexture tex;
+        while ((tex = pendingClose.poll()) != null) {
+            try {
+                tex.close();
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
     public static void captureBackground(Runnable onReady) {
         Minecraft mc = Minecraft.getInstance();
         net.minecraft.client.Screenshot.takeScreenshot(mc.getMainRenderTarget(), image -> mc.execute(() -> {
+            NativeImage finalImage = image;
+            int guiW = mc.getWindow().getGuiScaledWidth();
+            int guiH = mc.getWindow().getGuiScaledHeight();
+            if (image.getWidth() != guiW || image.getHeight() != guiH) {
+                NativeImage scaled = new NativeImage(guiW, guiH, false);
+                int srcW = image.getWidth();
+                int srcH = image.getHeight();
+
+                for (int y = 0; y < guiH; y++) {
+                    int sy = Math.min((int) Math.floor(((y + 0.5f) * srcH) / guiH), srcH - 1);
+                    for (int x = 0; x < guiW; x++) {
+                        int sx = Math.min((int) Math.floor(((x + 0.5f) * srcW) / guiW), srcW - 1);
+                        scaled.setPixel(x, y, image.getPixel(sx, sy));
+                    }
+                }
+                image.close();
+                finalImage = scaled;
+            }
             deferClose(backgroundTexture);
-            backgroundTexture = new DynamicTexture(() -> "screenshot_background", image);
+            backgroundTexture = new DynamicTexture(() -> "screenshot_background", finalImage);
             mc.getTextureManager().register(BACKGROUND_ID, backgroundTexture);
             if (onReady != null) onReady.run();
         }));
@@ -58,6 +83,13 @@ public class ScreenshotPreviewRenderer {
         deferClose(fullscreenTexture);
         fullscreenTexture = new DynamicTexture(() -> "screenshot_fullscreen", image);
         mc.getTextureManager().register(FULLSCREEN_ID, fullscreenTexture);
+    }
+
+    public static void setOldFullscreenTexture(NativeImage image) {
+        Minecraft mc = Minecraft.getInstance();
+        deferClose(oldFullscreenTexture);
+        oldFullscreenTexture = new DynamicTexture(() -> "screenshot_fullscreen_old", image);
+        mc.getTextureManager().register(OLD_FULLSCREEN_ID, oldFullscreenTexture);
     }
 
     private static long showUntil      = -1;
@@ -83,32 +115,70 @@ public class ScreenshotPreviewRenderer {
     private static final ResourceLocation ICON_SHOW_H  = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/show_hover.png");
     private static final ResourceLocation ICON_COPY    = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/copy.png");
     private static final ResourceLocation ICON_COPY_H  = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/copy_hover.png");
+    private static final ResourceLocation ICON_UPLOAD  = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/upload.png");
+    private static final ResourceLocation ICON_UPLOAD_H= ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/upload_hover.png");
     private static final ResourceLocation ICON_CLOSE   = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/close.png");
     private static final ResourceLocation ICON_CLOSE_H = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/close_hover.png");
 
     private static int       hoveredButton = -1;
-    private static final int[] btnX        = new int[3];
-    private static final int[] btnY        = new int[3];
+    private static final int[] btnX        = new int[4];
+    private static final int[] btnY        = new int[4];
+
+    private enum UploadState {
+        HIDDEN, UPLOADING, SUCCESS, ERROR
+    }
+
+    private static UploadState uploadState = UploadState.HIDDEN;
+    private static boolean uploadEnabledForCurrentPreview = false;
+    private static float uploadProgressTarget = 0f;
+    private static float uploadProgressDisplayed = 0f;
+    private static long lastProgressFrameMs = -1L;
+    private static String lastUploadUrl = "";
+    private static String lastUploadError = "";
 
     public static DynamicTexture getPreviewTexture() { return previewTexture; }
 
-    private static final ConcurrentHashMap<String, File> pendingFiles
-            = new ConcurrentHashMap<>();
+    private static final java.util.concurrent.ConcurrentHashMap<String, java.io.File> pendingFiles
+            = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.concurrent.ConcurrentHashMap<String, String> uploadedUrls
+            = new java.util.concurrent.ConcurrentHashMap<>();
+    private static volatile String currentPreviewId = null;
+    private static volatile java.io.File currentPreviewFile = null;
 
-    public static void registerFile(String id, File file) {
+    public static void registerFile(String id, java.io.File file) {
         pendingFiles.put(id, file);
+        currentPreviewId = id;
+        currentPreviewFile = file;
+    }
+
+    public static void registerUploadedUrl(String id, String url) {
+        if (id == null || id.isBlank() || url == null || url.isBlank()) return;
+        uploadedUrls.put(id, url);
+    }
+
+    public static void copyUploadedUrl(String id) {
+        if (id == null || id.isBlank()) return;
+        String url = uploadedUrls.get(id);
+        if (url == null || url.isBlank()) return;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.keyboardHandler != null) {
+            mc.keyboardHandler.setClipboard(url);
+            copyFlashStart = System.currentTimeMillis();
+        }
     }
 
     public static void loadAndPreview(String id, ScreenshotFullscreenScreen screen) {
-        File file = pendingFiles.get(id);
+        java.io.File file = pendingFiles.get(id);
         if (file == null || !file.exists()) return;
         Minecraft mc = Minecraft.getInstance();
         Thread.ofVirtual().start(() -> {
             try {
-                byte[] bytes = Files.readAllBytes(file.toPath());
-                NativeImage img = NativeImage.read(new ByteArrayInputStream(bytes));
+                byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
+                NativeImage img = NativeImage.read(new java.io.ByteArrayInputStream(bytes));
                 mc.execute(() -> {
-                    setFullscreenTexture(img);
+                    if (fullscreenTexture != null) fullscreenTexture.close();
+                    fullscreenTexture = new DynamicTexture(() -> "screenshot_fullscreen", img);
+                    mc.getTextureManager().register(FULLSCREEN_ID, fullscreenTexture);
                     screen.markLoaded();
                 });
             } catch (Exception e) { e.printStackTrace(); }
@@ -116,21 +186,21 @@ public class ScreenshotPreviewRenderer {
     }
 
     public static void copyFile(String id) {
-        File file = pendingFiles.get(id);
+        java.io.File file = pendingFiles.get(id);
         if (file == null || !file.exists()) return;
         copyFileToClipboard(file);
     }
 
-    public static void copyFileToClipboard(File file) {
+    public static void copyFileToClipboard(java.io.File file) {
         if (file == null || !file.exists()) return;
         Minecraft mc = Minecraft.getInstance();
         Thread.ofVirtual().start(() -> {
             try {
-                byte[] bytes = Files.readAllBytes(file.toPath());
-                NativeImage img = NativeImage.read(new ByteArrayInputStream(bytes));
+                byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
+                NativeImage img = NativeImage.read(new java.io.ByteArrayInputStream(bytes));
                 mc.execute(() -> {
                     try {
-                        File tmp = File.createTempFile("better_screenshots_", ".png");
+                        java.io.File tmp = java.io.File.createTempFile("better_screenshots_", ".png");
                         tmp.deleteOnExit();
                         img.writeToFile(tmp.toPath());
                         copyPathToClipboard(tmp.getAbsolutePath());
@@ -150,18 +220,82 @@ public class ScreenshotPreviewRenderer {
 
 
     public static void setPreview(NativeImage image) {
-        Minecraft.getInstance().execute(() -> {
-            deferClose(previewTexture);
-            previewTexture = new DynamicTexture(() -> "screenshot_preview", image);
-            Minecraft.getInstance().getTextureManager()
-                    .register(PREVIEW_ID, previewTexture);
-            showFrom       = System.currentTimeMillis();
-            showUntil      = showFrom + (ScreenshotConfig.get().previewDurationSeconds * 1000L);
-            flashStart     = ScreenshotConfig.get().previewAnimationsEnabled() ? showFrom : -1;
-            closeStart     = -1;
-            copyFlashStart = -1;
-            hoveredButton  = -1;
-        });
+        if (previewTexture != null) previewTexture.close();
+        previewTexture = new DynamicTexture(() -> "screenshot_preview", image);
+        Minecraft.getInstance().getTextureManager()
+                .register(PREVIEW_ID, previewTexture);
+        showFrom       = System.currentTimeMillis();
+        showUntil      = showFrom + (ScreenshotConfig.get().previewDurationSeconds * 1000L);
+        flashStart     = ScreenshotConfig.get().previewAnimationsEnabled() ? showFrom : -1;
+        closeStart     = -1;
+        copyFlashStart = -1;
+        hoveredButton  = -1;
+        uploadState = UploadState.HIDDEN;
+        uploadEnabledForCurrentPreview = false;
+        uploadProgressTarget = 0f;
+        uploadProgressDisplayed = 0f;
+        lastProgressFrameMs = -1L;
+        lastUploadUrl = "";
+        lastUploadError = "";
+        currentPreviewId = null;
+        currentPreviewFile = null;
+    }
+
+    public static void prepareUploadIndicator(boolean enabled) {
+        uploadEnabledForCurrentPreview = enabled;
+        if (!enabled) {
+            uploadState = UploadState.HIDDEN;
+            uploadProgressTarget = 0f;
+            uploadProgressDisplayed = 0f;
+            lastProgressFrameMs = -1L;
+            lastUploadUrl = "";
+            lastUploadError = "";
+            return;
+        }
+        uploadState = UploadState.HIDDEN;
+        uploadProgressTarget = 0f;
+        uploadProgressDisplayed = 0f;
+        lastProgressFrameMs = -1L;
+        lastUploadUrl = "";
+        lastUploadError = "";
+    }
+
+    public static void beginUploadIndicator() {
+        if (!uploadEnabledForCurrentPreview) return;
+        uploadState = UploadState.UPLOADING;
+        uploadProgressTarget = 0f;
+        uploadProgressDisplayed = 0f;
+        lastProgressFrameMs = -1L;
+        lastUploadUrl = "";
+        lastUploadError = "";
+    }
+
+    public static void updateUploadProgress(double progress) {
+        if (!uploadEnabledForCurrentPreview) return;
+        uploadState = UploadState.UPLOADING;
+        uploadProgressTarget = Math.max(0f, Math.min(1f, (float) progress));
+    }
+
+    public static void markUploadSuccess(String url) {
+        if (!uploadEnabledForCurrentPreview) return;
+        uploadState = UploadState.SUCCESS;
+        uploadProgressTarget = 1f;
+        lastUploadUrl = url == null ? "" : url;
+        lastUploadError = "";
+
+        long now = System.currentTimeMillis();
+        showUntil = Math.max(showUntil, now + 500L);
+    }
+
+    public static void markUploadError(String error) {
+        if (!uploadEnabledForCurrentPreview) return;
+        uploadState = UploadState.ERROR;
+        uploadProgressTarget = 1f;
+        lastUploadError = error == null ? "" : error;
+        lastUploadUrl = "";
+
+        long now = System.currentTimeMillis();
+        showUntil = Math.max(showUntil, now + 500L);
     }
 
     public static void close() {
@@ -180,19 +314,23 @@ public class ScreenshotPreviewRenderer {
         Minecraft mc = Minecraft.getInstance();
         ScreenshotConfig cfg = ScreenshotConfig.get();
 
-        int screenW    = mc.getWindow().getGuiScaledWidth();
-        int screenH    = mc.getWindow().getGuiScaledHeight();
+        int screenW    = context.guiWidth();
+        int screenH    = context.guiHeight();
         int baseWidth  = screenW / 4;
         int baseHeight = (baseWidth * previewTexture.getPixels().getHeight())
                 / previewTexture.getPixels().getWidth();
         int margin     = 10;
+        boolean showUploadBar = uploadEnabledForCurrentPreview;
+        int uploadBarH = showUploadBar ? 2 : 0;
+        int uploadBarGap = 0;
+        int uploadBarYOffset = showUploadBar ? (uploadBarH + uploadBarGap) : 0;
 
         int baseX = switch (cfg.corner) {
             case BOTTOM_RIGHT, TOP_RIGHT -> screenW - baseWidth - margin;
             case BOTTOM_LEFT,  TOP_LEFT  -> margin;
         };
         int baseY = switch (cfg.corner) {
-            case BOTTOM_RIGHT, BOTTOM_LEFT -> screenH - baseHeight - margin;
+            case BOTTOM_RIGHT, BOTTOM_LEFT -> screenH - baseHeight - margin - uploadBarYOffset;
             case TOP_RIGHT,    TOP_LEFT    -> margin;
         };
 
@@ -202,6 +340,10 @@ public class ScreenshotPreviewRenderer {
         float offsetX = 0f;
 
         long elapsed   = now - showFrom;
+        if (uploadEnabledForCurrentPreview && uploadState == UploadState.UPLOADING && now >= showUntil) {
+            // Keep preview visible while upload is still in progress.
+            showUntil = now + 1000L;
+        }
         long remaining = showUntil - now;
 
         if (closeStart != -1) {
@@ -270,10 +412,15 @@ public class ScreenshotPreviewRenderer {
                 (alphaInt << 24));
 
         // Image
-        int argb = ((int)(alpha * 255) << 24) | 0xFFFFFF;
         context.blit(RenderPipelines.GUI_TEXTURED, PREVIEW_ID,
                 drawX, drawY, 0f, 0f,
-                drawWidth, drawHeight, drawWidth, drawHeight, argb);
+                drawWidth, drawHeight, drawWidth, drawHeight);
+
+        // Overlay
+        if (alphaInt < 255) {
+            context.fill(drawX, drawY, drawX + drawWidth, drawY + drawHeight,
+                    ((255 - alphaInt) << 24));
+        }
 
         // ScreenShot animation
         if (cfg.previewAnimationsEnabled() && flashStart != -1) {
@@ -302,17 +449,20 @@ public class ScreenshotPreviewRenderer {
                 copyFlashStart = -1;
             }
         }
-
-        // Action buttons
-        int totalBtnsW = 3 * BTN_W + 2 * BTN_GAP;
+        // Action buttons (optional, file-only config)
+        if (!cfg.hideMiniPreviewActionButtons) {
+        boolean showUploadButton = ScreenshotUploader.isUploaderEnabled() && !cfg.uploadAutoUpload;
+        int visibleButtons = showUploadButton ? 4 : 3;
+        int totalBtnsW = visibleButtons * BTN_W + Math.max(0, visibleButtons - 1) * BTN_GAP;
         int btnsStartX = drawX + drawWidth - totalBtnsW - 2;
         int btnsY      = drawY + 2;
 
-        double mouseX = mc.mouseHandler.xpos() / mc.getWindow().getGuiScale();
-        double mouseY = mc.mouseHandler.ypos() / mc.getWindow().getGuiScale();
+        // Convert raw window-space mouse coords to current GUI-space coords.
+        double mouseX = mc.mouseHandler.xpos() * context.guiWidth() / mc.getWindow().getScreenWidth();
+        double mouseY = mc.mouseHandler.ypos() * context.guiHeight() / mc.getWindow().getScreenHeight();
         hoveredButton = -1;
 
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < visibleButtons; i++) {
             btnX[i] = btnsStartX + i * (BTN_W + BTN_GAP);
             btnY[i] = btnsY;
             if (mouseX >= btnX[i] && mouseX <= btnX[i] + BTN_W
@@ -320,16 +470,79 @@ public class ScreenshotPreviewRenderer {
                 hoveredButton = i;
             }
         }
+        for (int i = visibleButtons; i < btnX.length; i++) {
+            btnX[i] = -100;
+            btnY[i] = -100;
+        }
 
-        ResourceLocation[] icons = {
-                hoveredButton == 0 ? ICON_SHOW_H  : ICON_SHOW,
-                hoveredButton == 1 ? ICON_COPY_H  : ICON_COPY,
-                hoveredButton == 2 ? ICON_CLOSE_H : ICON_CLOSE,
-        };
-        for (int i = 0; i < 3; i++) {
+        ResourceLocation[] icons = showUploadButton
+                ? new ResourceLocation[] {
+                        hoveredButton == 0 ? ICON_SHOW_H   : ICON_SHOW,
+                        hoveredButton == 1 ? ICON_COPY_H   : ICON_COPY,
+                        hoveredButton == 2 ? ICON_UPLOAD_H : ICON_UPLOAD,
+                        hoveredButton == 3 ? ICON_CLOSE_H  : ICON_CLOSE
+                }
+                : new ResourceLocation[] {
+                        hoveredButton == 0 ? ICON_SHOW_H  : ICON_SHOW,
+                        hoveredButton == 1 ? ICON_COPY_H  : ICON_COPY,
+                        hoveredButton == 2 ? ICON_CLOSE_H : ICON_CLOSE
+                };
+        for (int i = 0; i < visibleButtons; i++) {
             context.blit(RenderPipelines.GUI_TEXTURED, icons[i],
                     btnX[i], btnY[i], 0f, 0f,
-                    BTN_W, BTN_H, BTN_W, BTN_H, 0xFFFFFFFF);
+                    BTN_W, BTN_H, BTN_W, BTN_H);
+        }
+        } else {
+            hoveredButton = -1;
+            for (int i = 0; i < btnX.length; i++) {
+                btnX[i] = -100;
+                btnY[i] = -100;
+            }
+        }
+
+        if (showUploadBar) {
+            if (lastProgressFrameMs < 0) {
+                lastProgressFrameMs = now;
+            }
+            float dt = Math.max(0f, Math.min(100f, now - lastProgressFrameMs));
+            lastProgressFrameMs = now;
+            // Exponential smoothing for visually fluid progress transitions.
+            float smoothing = 1f - (float) Math.exp(-dt / 120f);
+            uploadProgressDisplayed += (uploadProgressTarget - uploadProgressDisplayed) * smoothing;
+            if (Math.abs(uploadProgressTarget - uploadProgressDisplayed) < 0.001f) {
+                uploadProgressDisplayed = uploadProgressTarget;
+            }
+
+            int barX = drawX;
+            int barY = drawY + drawHeight + uploadBarGap;
+            int barW = drawWidth;
+            int barFillW;
+            int barColor;
+
+            switch (uploadState) {
+                case SUCCESS -> {
+                    barColor = 0xFF34C759;
+                    barFillW = barW;
+                }
+                case ERROR -> {
+                    barColor = 0xFFE74C3C;
+                    barFillW = barW;
+                }
+                case UPLOADING -> {
+                    barColor = 0xFF42B9FF;
+                    float p = Math.max(0.04f, Math.min(1f, uploadProgressDisplayed));
+                    barFillW = Math.max(1, (int) (barW * p));
+                }
+                default -> {
+                    barColor = 0x6642B9FF;
+                    barFillW = 0;
+                }
+            }
+
+            context.fill(barX, barY, barX + barW, barY + uploadBarH, 0x66000000);
+            if (barFillW > 0) {
+                context.fill(barX, barY, barX + barFillW, barY + uploadBarH, barColor);
+            }
         }
     }
 
@@ -338,14 +551,30 @@ public class ScreenshotPreviewRenderer {
         if (closeStart != -1) return false;
         if (showUntil != -1 && System.currentTimeMillis() > showUntil) return false;
 
-        for (int i = 0; i < 3; i++) {
+        ScreenshotConfig cfg = ScreenshotConfig.get();
+        if (cfg.hideMiniPreviewActionButtons) return false;
+        boolean showUploadButton = ScreenshotUploader.isUploaderEnabled() && !cfg.uploadAutoUpload;
+        int visibleButtons = showUploadButton ? 4 : 3;
+
+        for (int i = 0; i < visibleButtons; i++) {
             if (btnX[i] == 0 && btnY[i] == 0) continue;
             if (mouseX >= btnX[i] && mouseX <= btnX[i] + BTN_W
                     && mouseY >= btnY[i] && mouseY <= btnY[i] + BTN_H) {
-                switch (i) {
-                    case 0 -> openFullscreen();
-                    case 1 -> copyToClipboard();
-                    case 2 -> close();
+                if (showUploadButton) {
+                    playActionButtonClickSound();
+                    switch (i) {
+                        case 0 -> openFullscreen();
+                        case 1 -> copyToClipboard();
+                        case 2 -> uploadCurrentPreview();
+                        case 3 -> close();
+                    }
+                } else {
+                    playActionButtonClickSound();
+                    switch (i) {
+                        case 0 -> openFullscreen();
+                        case 1 -> copyToClipboard();
+                        case 2 -> close();
+                    }
                 }
                 return true;
             }
@@ -353,11 +582,17 @@ public class ScreenshotPreviewRenderer {
         return false;
     }
 
+    private static void playActionButtonClickSound() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc == null || mc.getSoundManager() == null) return;
+        mc.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 2.0f));
+    }
+
     private static void copyToClipboard() {
         if (previewTexture == null || previewTexture.getPixels() == null) return;
         try {
             NativeImage img = previewTexture.getPixels();
-            File tmp = File.createTempFile("better_screenshots_", ".png");
+            java.io.File tmp = java.io.File.createTempFile("better_screenshots_", ".png");
             tmp.deleteOnExit();
             img.writeToFile(tmp.toPath());
             copyPathToClipboard(tmp.getAbsolutePath());
@@ -406,13 +641,14 @@ public class ScreenshotPreviewRenderer {
                 screen.useCurrentTexture();
                 screen.setFromHud(true);
 
-                File dir = new File(mc.gameDirectory, "screenshots");
-                File[] found = dir.listFiles(
+                // Find the most-recently-modified file in screenshots dir as current
+                java.io.File dir = new java.io.File(mc.gameDirectory, "screenshots");
+                java.io.File[] found = dir.listFiles(
                         f -> f.isFile() && f.getName().toLowerCase().endsWith(".png"));
-                File currentFile = null;
+                java.io.File currentFile = null;
                 if (found != null && found.length > 0) {
                     java.util.Arrays.sort(found,
-                            java.util.Comparator.comparingLong(File::lastModified).reversed());
+                            java.util.Comparator.comparingLong(java.io.File::lastModified).reversed());
                     currentFile = found[0];
                 }
                 screen.initNavigationFromScreenshotsDir(currentFile);
@@ -420,5 +656,22 @@ public class ScreenshotPreviewRenderer {
                 captureBackground(() -> mc.setScreen(screen));
             });
         }
+    }
+
+    private static void uploadCurrentPreview() {
+        if (!ScreenshotUploader.isUploaderEnabled()) return;
+        String id = currentPreviewId == null || currentPreviewId.isBlank()
+                ? String.valueOf(System.nanoTime())
+                : currentPreviewId;
+        java.io.File file = currentPreviewFile;
+        if (file == null || !file.exists()) {
+            java.io.File dir = new java.io.File(Minecraft.getInstance().gameDirectory, "screenshots");
+            java.io.File[] found = dir.listFiles(f -> f.isFile() && f.getName().toLowerCase().endsWith(".png"));
+            if (found != null && found.length > 0) {
+                java.util.Arrays.sort(found, java.util.Comparator.comparingLong(java.io.File::lastModified).reversed());
+                file = found[0];
+            }
+        }
+        ScreenshotUploader.uploadWithClientFeedback(file, id, true);
     }
 }

@@ -46,7 +46,6 @@ public class Better_screenshotsClient {
         @SubscribeEvent
         public static void onRenderGui(RenderGuiEvent.Post event) {
             ScreenshotPreviewRenderer.render(event.getGuiGraphics());
-            ScreenshotPreviewRenderer.flushPendingClose();
         }
 
         @SubscribeEvent
@@ -59,8 +58,10 @@ public class Better_screenshotsClient {
             if (event.getAction() != 1) return; // only press, not release
 
             Minecraft mc = Minecraft.getInstance();
-            double mouseX = mc.mouseHandler.xpos() / mc.getWindow().getGuiScale();
-            double mouseY = mc.mouseHandler.ypos() / mc.getWindow().getGuiScale();
+            double mouseX = mc.mouseHandler.xpos() * mc.getWindow().getGuiScaledWidth()
+                    / mc.getWindow().getScreenWidth();
+            double mouseY = mc.mouseHandler.ypos() * mc.getWindow().getGuiScaledHeight()
+                    / mc.getWindow().getScreenHeight();
             int button = event.getButton();
 
             if (mc.screen instanceof ScreenshotConfigScreen config) {

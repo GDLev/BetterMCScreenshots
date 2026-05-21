@@ -20,8 +20,8 @@ public class MouseHandlerMixin {
         if (action != 1) return;
 
         Minecraft mc = Minecraft.getInstance();
-        double mouseX = mc.mouseHandler.xpos() / mc.getWindow().getGuiScale();
-        double mouseY = mc.mouseHandler.ypos() / mc.getWindow().getGuiScale();
+        double mouseX = mc.mouseHandler.xpos() * mc.getWindow().getGuiScaledWidth() / mc.getWindow().getScreenWidth();
+        double mouseY = mc.mouseHandler.ypos() * mc.getWindow().getGuiScaledHeight() / mc.getWindow().getScreenHeight();
 
         // Configuration - Handle clicks on thumbnails and action buttons
         if (mc.screen instanceof ScreenshotConfigScreen config) {

@@ -13,9 +13,11 @@ import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.sounds.SoundEvents;
 import org.jspecify.annotations.NonNull;
 
 public class ScreenshotConfigScreen extends Screen {
@@ -46,19 +48,36 @@ public class ScreenshotConfigScreen extends Screen {
     private static final Identifier ICON_SHOW_H  = Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/show_hover.png");
     private static final Identifier ICON_COPY    = Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/copy.png");
     private static final Identifier ICON_COPY_H  = Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/copy_hover.png");
-    private static final Identifier ICON_DELETE  = Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/close.png");
-    private static final Identifier ICON_DELETE_H= Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/close_hover.png");
+    private static final Identifier ICON_UPLOAD  = Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/upload.png");
+    private static final Identifier ICON_UPLOAD_H= Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/upload_hover.png");
+    private static final Identifier ICON_DELETE  = Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/delete.png");
+    private static final Identifier ICON_DELETE_H= Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/delete_hover.png");
 
     private static final int ACT_BTN_W   = 8;
     private static final int ACT_BTN_H   = 10;
     private static final int ACT_BTN_GAP = 0;
+    private static final int UPLOAD_BAR_H = 2;
+    private static final long UPLOAD_STATE_HOLD_MS = 1400L;
 
     private int selectedThumbIdx = -1;
 
     private boolean pendingExternalRefresh = false;
 
-    private final int[] actionBtnX = new int[3];
-    private final int[] actionBtnY = new int[3];
+    private final int[] actionBtnX = new int[4];
+    private final int[] actionBtnY = new int[4];
+    private final Map<String, ThumbUploadOverlay> thumbUploadStates = new HashMap<>();
+
+    private enum ThumbUploadState {
+        UPLOADING, SUCCESS, ERROR
+    }
+
+    private static final class ThumbUploadOverlay {
+        ThumbUploadState state = ThumbUploadState.UPLOADING;
+        float target = 0f;
+        float displayed = 0f;
+        long lastFrameMs = -1L;
+        long clearAtMs = 0L;
+    }
 
     public ScreenshotConfigScreen(Screen parent) {
         super(Component.translatable("better_screenshots.title"));
@@ -76,6 +95,9 @@ public class ScreenshotConfigScreen extends Screen {
     private int rightX()     { return leftX() + COL_W + SEP; }
     private int topY()       { return panelY() + 28; }
     private int bottomBtnY() { return panelY() + panelH() - 12 - BTN_H; }
+    private int screenshotsFirstRowTopMargin() {
+        return ScreenshotConfig.get().screenshotsFirstRowTopMargin;
+    }
 
     @Override
     protected void init() {
@@ -179,6 +201,12 @@ public class ScreenshotConfigScreen extends Screen {
                         Component.translatable("better_screenshots.config.menu_button"),
                         (btn, val) -> { ScreenshotConfig.get().menuButtonPosition = val; ScreenshotConfig.save(); })));
 
+        settingsWidgets.add(addRenderableWidget(Button.builder(
+                        Component.translatable("better_screenshots.config.uploader.configure"),
+                        btn -> minecraft.setScreen(new UploaderConfigScreen(this)))
+                .bounds(lx, ty + 14 + GAP * 7, COL_W, BTN_H)
+                .build()));
+
         // Back
         doneBtn = addRenderableWidget(Button.builder(
                         Component.translatable("better_screenshots.config.done"),
@@ -240,7 +268,7 @@ public class ScreenshotConfigScreen extends Screen {
                 Component.translatable("better_screenshots.config.section.screenshots"),
                 rx + COL_W / 2, ty + 2, 0xFF777777);
 
-        int thumbsTopY = ty + 14;
+        int thumbsTopY = ty + 14 + screenshotsFirstRowTopMargin();
 
         // Action buttons reset
         Arrays.fill(actionBtnX, -100);
@@ -298,16 +326,26 @@ public class ScreenshotConfigScreen extends Screen {
                 if (ca > 0) context.fill(tx, tty, tx + tw, tty + th, (ca << 24) | 0x004499FF);
             }
 
+            if (i < thumbFiles.size() && thumbFiles.get(i) != null) {
+                renderUploadOverlay(context, tx, tty, tw, th, thumbFiles.get(i));
+            }
+
             // Action buttons
             if (sel && i < thumbFiles.size() && thumbFiles.get(i) != null) {
-                int totalBtnsW = 3 * ACT_BTN_W + 2 * ACT_BTN_GAP;
+                boolean showUploadAction = ScreenshotUploader.isUploaderEnabled();
+                int visibleButtons = showUploadAction ? 4 : 3;
+                int totalBtnsW = visibleButtons * ACT_BTN_W + Math.max(0, visibleButtons - 1) * ACT_BTN_GAP;
                 int btnsStartX = tx + tw - totalBtnsW - 2;
                 int btnsY      = tty + 2;
 
-                Identifier[] icons  = { ICON_SHOW,   ICON_COPY,   ICON_DELETE   };
-                Identifier[] iconsH = { ICON_SHOW_H, ICON_COPY_H, ICON_DELETE_H };
+                Identifier[] icons = showUploadAction
+                        ? new Identifier[] { ICON_SHOW, ICON_COPY, ICON_UPLOAD, ICON_DELETE }
+                        : new Identifier[] { ICON_SHOW, ICON_COPY, ICON_DELETE };
+                Identifier[] iconsH = showUploadAction
+                        ? new Identifier[] { ICON_SHOW_H, ICON_COPY_H, ICON_UPLOAD_H, ICON_DELETE_H }
+                        : new Identifier[] { ICON_SHOW_H, ICON_COPY_H, ICON_DELETE_H };
 
-                for (int b = 0; b < 3; b++) {
+                for (int b = 0; b < visibleButtons; b++) {
                     actionBtnX[b] = btnsStartX + b * (ACT_BTN_W + ACT_BTN_GAP);
                     actionBtnY[b] = btnsY;
 
@@ -321,6 +359,10 @@ public class ScreenshotConfigScreen extends Screen {
                             btnHov ? iconsH[b] : icons[b],
                             actionBtnX[b], actionBtnY[b],
                             0f, 0f, ACT_BTN_W, ACT_BTN_H, ACT_BTN_W, ACT_BTN_H);
+                }
+                for (int b = visibleButtons; b < actionBtnX.length; b++) {
+                    actionBtnX[b] = -100;
+                    actionBtnY[b] = -100;
                 }
             }
         }
@@ -374,6 +416,13 @@ public class ScreenshotConfigScreen extends Screen {
     public boolean mouseClicked(MouseButtonEvent input, boolean consumed) {
         updateWidgetPositions();
         if (handleClick(input.button(), input.x(), input.y())) return true;
+
+        if (input.button() == 0) {
+            if (doneBtn != null && doneBtn.isMouseOver(input.x(), input.y())) {
+                minecraft.setScreen(parent);
+                return true;
+            }
+        }
 
         if (input.button() == 0 && maxScroll > 0) {
             int lx = leftX();
@@ -445,13 +494,25 @@ public class ScreenshotConfigScreen extends Screen {
 
         // Show action buttons when selected
         if (selectedThumbIdx >= 0) {
-            for (int i = 0; i < 3; i++) {
+            boolean showUploadAction = ScreenshotUploader.isUploaderEnabled();
+            int visibleButtons = showUploadAction ? 4 : 3;
+            for (int i = 0; i < visibleButtons; i++) {
                 if (mouseX >= actionBtnX[i] && mouseX <= actionBtnX[i] + ACT_BTN_W
                         && mouseY >= actionBtnY[i] && mouseY <= actionBtnY[i] + ACT_BTN_H) {
-                    switch (i) {
-                        case 0 -> openFullscreen(selectedThumbIdx);
-                        case 1 -> copyFile(selectedThumbIdx);
-                        case 2 -> deleteFile(selectedThumbIdx);
+                    playActionButtonClickSound();
+                    if (showUploadAction) {
+                        switch (i) {
+                            case 0 -> openFullscreen(selectedThumbIdx);
+                            case 1 -> copyFile(selectedThumbIdx);
+                            case 2 -> uploadFile(selectedThumbIdx);
+                            case 3 -> deleteFile(selectedThumbIdx);
+                        }
+                    } else {
+                        switch (i) {
+                            case 0 -> openFullscreen(selectedThumbIdx);
+                            case 1 -> copyFile(selectedThumbIdx);
+                            case 2 -> deleteFile(selectedThumbIdx);
+                        }
                     }
                     return true;
                 }
@@ -461,7 +522,7 @@ public class ScreenshotConfigScreen extends Screen {
         int tw = thumbW();
         int th = thumbH();
         int rx = rightX();
-        int thumbsTopY = topY() + 14;
+        int thumbsTopY = topY() + 14 + screenshotsFirstRowTopMargin();
 
         for (int i = 0; i < Math.min(4, thumbFiles.size()); i++) {
             int col = i % 2;
@@ -476,6 +537,11 @@ public class ScreenshotConfigScreen extends Screen {
             }
         }
         return false;
+    }
+
+    private void playActionButtonClickSound() {
+        if (minecraft == null || minecraft.getSoundManager() == null) return;
+        minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 2.0f));
     }
 
     // Actions
@@ -503,9 +569,41 @@ public class ScreenshotConfigScreen extends Screen {
         ScreenshotPreviewRenderer.copyFileToClipboard(thumbFiles.get(idx));
     }
 
+    private void uploadFile(int idx) {
+        if (idx < 0 || idx >= thumbFiles.size()) return;
+        File file = thumbFiles.get(idx);
+        String uploadId = String.valueOf(System.nanoTime());
+        beginUploadOverlay(file);
+        ScreenshotUploader.uploadAsync(file, new ScreenshotUploader.Listener() {
+            @Override
+            public void onProgress(double progress) {
+                minecraft.execute(() -> updateUploadOverlay(file, progress));
+            }
+
+            @Override
+            public void onSuccess(String uploadedUrl) {
+                minecraft.execute(() -> {
+                    ScreenshotPreviewRenderer.registerUploadedUrl(uploadId, uploadedUrl);
+                    ScreenshotUploader.copyUrlToClipboard(uploadedUrl);
+                    ScreenshotUploader.showUploadSuccessToast();
+                    markUploadOverlaySuccess(file);
+                });
+            }
+
+            @Override
+            public void onError(String error) {
+                minecraft.execute(() -> {
+                    ScreenshotUploader.showUploadErrorToast(error);
+                    markUploadOverlayError(file);
+                });
+            }
+        });
+    }
+
     private void deleteFile(int idx) {
         if (idx < 0 || idx >= thumbFiles.size()) return;
         File file = thumbFiles.get(idx);
+        thumbUploadStates.remove(uploadKey(file));
         if (file.delete()) {
             screenshotCount = Math.max(0, screenshotCount - 1);
             selectedThumbIdx = -1;
@@ -522,6 +620,7 @@ public class ScreenshotConfigScreen extends Screen {
         thumbFiles.clear();
         screenshotCount = 0;
         selectedThumbIdx = -1;
+        thumbUploadStates.clear();
 
         File dir = new File(Minecraft.getInstance().gameDirectory, "screenshots");
         if (!dir.exists()) return;
@@ -605,5 +704,90 @@ public class ScreenshotConfigScreen extends Screen {
     public void onClose() {
         for (DynamicTexture t : thumbTextures) if (t != null) t.close();
         minecraft.setScreen(parent);
+    }
+
+    private String uploadKey(File file) {
+        return file == null ? "" : file.getAbsolutePath();
+    }
+
+    private void beginUploadOverlay(File file) {
+        if (file == null) return;
+        ThumbUploadOverlay overlay = new ThumbUploadOverlay();
+        overlay.state = ThumbUploadState.UPLOADING;
+        overlay.target = 0.04f;
+        overlay.displayed = 0f;
+        overlay.lastFrameMs = -1L;
+        overlay.clearAtMs = 0L;
+        thumbUploadStates.put(uploadKey(file), overlay);
+    }
+
+    private void updateUploadOverlay(File file, double progress) {
+        if (file == null) return;
+        ThumbUploadOverlay overlay = thumbUploadStates.computeIfAbsent(uploadKey(file), k -> new ThumbUploadOverlay());
+        overlay.state = ThumbUploadState.UPLOADING;
+        overlay.target = Math.max(0.04f, Math.min(1f, (float) progress));
+        overlay.clearAtMs = 0L;
+    }
+
+    private void markUploadOverlaySuccess(File file) {
+        if (file == null) return;
+        ThumbUploadOverlay overlay = thumbUploadStates.computeIfAbsent(uploadKey(file), k -> new ThumbUploadOverlay());
+        overlay.state = ThumbUploadState.SUCCESS;
+        overlay.target = 1f;
+        overlay.clearAtMs = System.currentTimeMillis() + UPLOAD_STATE_HOLD_MS;
+    }
+
+    private void markUploadOverlayError(File file) {
+        if (file == null) return;
+        ThumbUploadOverlay overlay = thumbUploadStates.computeIfAbsent(uploadKey(file), k -> new ThumbUploadOverlay());
+        overlay.state = ThumbUploadState.ERROR;
+        overlay.target = 1f;
+        overlay.clearAtMs = System.currentTimeMillis() + UPLOAD_STATE_HOLD_MS;
+    }
+
+    private void renderUploadOverlay(GuiGraphicsExtractor context, int x, int y, int w, int h, File file) {
+        ThumbUploadOverlay overlay = thumbUploadStates.get(uploadKey(file));
+        if (overlay == null) return;
+
+        long now = System.currentTimeMillis();
+        if (overlay.state != ThumbUploadState.UPLOADING && now > overlay.clearAtMs) {
+            thumbUploadStates.remove(uploadKey(file));
+            return;
+        }
+
+        if (overlay.lastFrameMs < 0L) {
+            overlay.lastFrameMs = now;
+        }
+        float dt = Math.max(0f, Math.min(100f, now - overlay.lastFrameMs));
+        overlay.lastFrameMs = now;
+        float smoothing = 1f - (float) Math.exp(-dt / 120f);
+        overlay.displayed += (overlay.target - overlay.displayed) * smoothing;
+        if (Math.abs(overlay.target - overlay.displayed) < 0.001f) {
+            overlay.displayed = overlay.target;
+        }
+
+        int barX = x;
+        int barY = y;
+        int barW = w;
+        int fillW;
+        int color;
+        switch (overlay.state) {
+            case SUCCESS -> {
+                color = 0xFF34C759;
+                fillW = barW;
+            }
+            case ERROR -> {
+                color = 0xFFE74C3C;
+                fillW = barW;
+            }
+            default -> {
+                color = 0xFF42B9FF;
+                float p = Math.max(0.04f, Math.min(1f, overlay.displayed));
+                fillW = Math.max(1, (int) (barW * p));
+            }
+        }
+
+        context.fill(barX, barY, barX + barW, barY + UPLOAD_BAR_H, 0x66000000);
+        context.fill(barX, barY, barX + fillW, barY + UPLOAD_BAR_H, color);
     }
 }

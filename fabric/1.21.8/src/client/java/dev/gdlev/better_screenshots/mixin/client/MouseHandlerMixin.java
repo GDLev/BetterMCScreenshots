@@ -46,7 +46,9 @@ public class MouseHandlerMixin {
                 && !(mc.screen instanceof ScreenshotFullscreenScreen)
                 && !(mc.screen instanceof ScreenshotConfigScreen)) {
             if (button == 0) {
-                if (ScreenshotPreviewRenderer.handleClick(mouseX, mouseY)) {
+                double previewMouseX = mc.mouseHandler.xpos() * mc.getWindow().getGuiScaledWidth() / mc.getWindow().getScreenWidth();
+                double previewMouseY = mc.mouseHandler.ypos() * mc.getWindow().getGuiScaledHeight() / mc.getWindow().getScreenHeight();
+                if (ScreenshotPreviewRenderer.handleClick(previewMouseX, previewMouseY)) {
                     ci.cancel();
                 }
             }

@@ -4,6 +4,7 @@ import com.mojang.blaze3d.pipeline.RenderTarget;
 import dev.gdlev.better_screenshots.client.Better_screenshotsClient;
 import dev.gdlev.better_screenshots.client.ScreenshotConfig;
 import dev.gdlev.better_screenshots.client.ScreenshotPreviewRenderer;
+import dev.gdlev.better_screenshots.client.ScreenshotUploader;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -50,29 +51,37 @@ public class ScreenshotRecorderMixin {
         final String screenshotId = String.valueOf(System.nanoTime());
 
         Screenshot.takeScreenshot(framebuffer, image -> {
+            boolean uploaderEnabled = cfg.uploadProvider != ScreenshotConfig.UploadProvider.DISABLED;
+            boolean autoUploadEnabled = uploaderEnabled && cfg.uploadAutoUpload;
+
             if (!fullscreenOpen) {
                 ScreenshotPreviewRenderer.setPreview(image);
+                ScreenshotPreviewRenderer.prepareUploadIndicator(uploaderEnabled);
             }
 
-            if (cfg.chatNotification == ScreenshotConfig.ChatNotification.MODERN) {
-                client.execute(() -> {
-                    File screenshotsDir = new File(client.gameDirectory, "screenshots");
-                    File[] files = screenshotsDir.listFiles(
-                            f -> f.isFile() && f.getName().toLowerCase().endsWith(".png"));
-                    String fileName = Component.translatable(
-                            "better_screenshots.chat.default_filename").getString();
-                    File screenshotFile = null;
-                    if (files != null && files.length > 0) {
-                        java.util.Arrays.sort(files,
-                                java.util.Comparator.comparingLong(File::lastModified).reversed());
-                        screenshotFile = files[0];
-                        fileName = screenshotFile.getName();
-                    }
+            client.execute(() -> {
+                File screenshotsDir = new File(client.gameDirectory, "screenshots");
+                File[] files = screenshotsDir.listFiles(
+                        f -> f.isFile() && f.getName().toLowerCase().endsWith(".png"));
+                String fileName = Component.translatable(
+                        "better_screenshots.chat.default_filename").getString();
+                File screenshotFile = null;
+                if (files != null && files.length > 0) {
+                    java.util.Arrays.sort(files,
+                            java.util.Comparator.comparingLong(File::lastModified).reversed());
+                    screenshotFile = files[0];
+                    fileName = screenshotFile.getName();
+                }
 
-                    if (screenshotFile != null) {
-                        ScreenshotPreviewRenderer.registerFile(screenshotId, screenshotFile);
-                    }
+                if (screenshotFile != null) {
+                    ScreenshotPreviewRenderer.registerFile(screenshotId, screenshotFile);
+                }
 
+                if (autoUploadEnabled) {
+                    ScreenshotUploader.uploadWithClientFeedback(screenshotFile, screenshotId, !fullscreenOpen);
+                }
+
+                if (cfg.chatNotification == ScreenshotConfig.ChatNotification.MODERN) {
                     final String finalFileName = fileName;
 
                     MutableComponent prefix = Component.literal("").withStyle(ChatFormatting.GRAY);
@@ -123,8 +132,8 @@ public class ScreenshotRecorderMixin {
                                 prefix.append(fileLink).append(sep)
                                         .append(previewBtn).append(sep2).append(copyBtn));
                     }
-                });
-            }
+                }
+            });
 
             client.execute(() -> {
                 if (cfg.shutterSound == ScreenshotConfig.ShutterSound.NONE) return;

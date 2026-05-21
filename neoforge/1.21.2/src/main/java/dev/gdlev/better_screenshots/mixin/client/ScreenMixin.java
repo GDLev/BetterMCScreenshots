@@ -19,6 +19,39 @@ public class ScreenMixin {
             ClickEvent event = style.getClickEvent();
             if (event.getAction() == ClickEvent.Action.RUN_COMMAND) {
                 String value = event.getValue();
+
+                if (value.startsWith("/better_screenshots ")) {
+                    String[] parts = value.trim().split("\\s+", 3);
+                    if (parts.length >= 2) {
+                        String action = parts[1];
+                        Minecraft mc = Minecraft.getInstance();
+                        if ("preview".equals(action) && parts.length >= 3) {
+                            String id = parts[2];
+                            ScreenshotFullscreenScreen screen = new ScreenshotFullscreenScreen(mc.screen);
+                            screen.setFromHud(false);
+                            mc.setScreen(screen);
+                            ScreenshotPreviewRenderer.loadAndPreview(id, screen);
+                            cir.setReturnValue(true);
+                            cir.cancel();
+                            return;
+                        }
+                        if ("copy".equals(action) && parts.length >= 3) {
+                            String id = parts[2];
+                            ScreenshotPreviewRenderer.copyFile(id);
+                            cir.setReturnValue(true);
+                            cir.cancel();
+                            return;
+                        }
+                        if ("copy_upload".equals(action) && parts.length >= 3) {
+                            String id = parts[2];
+                            ScreenshotPreviewRenderer.copyUploadedUrl(id);
+                            cir.setReturnValue(true);
+                            cir.cancel();
+                            return;
+                        }
+                    }
+                }
+
                 if (value.startsWith("bs-action:")) {
                     String actionData = value.substring("bs-action:".length());
                     String[] parts = actionData.split(":");

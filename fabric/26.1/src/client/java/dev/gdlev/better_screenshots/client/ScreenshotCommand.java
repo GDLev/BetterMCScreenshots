@@ -60,6 +60,14 @@ public class ScreenshotCommand {
                                     });
                                     return 1;
                                 }))
+                        .then(ClientCommands.literal("copy_upload")
+                                .then(ClientCommands.argument("id", StringArgumentType.word())
+                                        .executes(ctx -> {
+                                            String id = StringArgumentType.getString(ctx, "id");
+                                            Minecraft mc = Minecraft.getInstance();
+                                            mc.execute(() -> ScreenshotPreviewRenderer.copyUploadedUrl(id));
+                                            return 1;
+                                        })))
         );
     }
 }
