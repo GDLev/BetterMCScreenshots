@@ -1,0 +1,9 @@
+{
+  "pack": {
+    "description": "Better ScreenShots resources",
+    "pack_format": 34,
+    "supported_formats": [34, 101],
+    "min_format": [34, 0],
+    "max_format": 101
+  }
+}

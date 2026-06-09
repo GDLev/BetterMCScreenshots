@@ -15,7 +15,6 @@ loom {
 
     mods {
         "better_screenshots" {
-            sourceSet sourceSets.main
             sourceSet sourceSets.client
         }
     }
@@ -44,7 +43,7 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 }
 
-processResources {
+processClientResources {
     inputs.property "version", project.version
     inputs.property "minecraft_version", project.minecraft_version_depend
     inputs.property "loader_version", project.loader_version

@@ -1,0 +1,15 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'net.minecraftforge.gradle' version '7.0.21'
+}
+
+apply from: rootProject.file("../gradle/forge.gradle")
+
+// Forge 51 expects the automatic module name "jopt.simple" from version 5.0.4.
+// Gradle otherwise selects 6.0-alpha-3, whose module is named "joptsimple".
+configurations.configureEach {
+    resolutionStrategy {
+        force "net.sf.jopt-simple:jopt-simple:5.0.4"
+    }
+}

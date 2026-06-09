@@ -1,0 +1,68 @@
+allprojects {
+    group = "dev.gdlev"
+}
+
+def workspaceRoot = projectDir.parentFile
+def allVariants = ["1.21", "1.21.3", "1.21.5", "1.21.8", "1.21.10", "1.21.11", "26.1"]
+
+def sharedJavaLayers = [
+        "minecraft"                         : allVariants,
+
+        "versions/1.21"                     : ["1.21"],
+        "versions/1.21.2"                   : ["1.21.3"],
+        "versions/1.21.5"                   : ["1.21.5"],
+        "versions/1.21.8"                   : ["1.21.8"],
+        "versions/1.21.10"                  : ["1.21.10"],
+        "versions/1.21.11"                  : ["1.21.11"],
+        "versions/26.1"                     : ["26.1"],
+        "versions/1.21-1.21.8"              : ["1.21", "1.21.3", "1.21.5", "1.21.8"],
+        "versions/1.21.5-1.21.11"           : ["1.21.5", "1.21.8", "1.21.10", "1.21.11"],
+        "versions/1.21.10-1.21.11"          : ["1.21.10", "1.21.11"],
+
+        "loaders/forge/all"                  : allVariants,
+        "loaders/forge/pre-1.21.11"          : ["1.21.3", "1.21.5"],
+        "loaders/forge/1.21"                 : ["1.21"],
+        "loaders/forge/1.21.8-1.21.10"       : ["1.21.8", "1.21.10"],
+        "loaders/forge/26.1"                  : ["26.1"],
+        "loaders/forge/current"              : ["1.21.11", "26.1"],
+        "loaders/forge/1.21-1.21.3"          : ["1.21", "1.21.3"],
+        "loaders/forge/1.21-1.21.5"          : ["1.21", "1.21.3", "1.21.5"],
+        "loaders/forge/1.21.5-1.21.8"        : ["1.21.5", "1.21.8"],
+        "loaders/forge/1.21.5-1.21.11"       : ["1.21.5", "1.21.8", "1.21.10", "1.21.11"],
+        "loaders/forge/1.21.8-1.21.11"        : ["1.21.8", "1.21.10", "1.21.11"],
+
+        "loaders/forge-family/all"           : allVariants,
+        "loaders/forge-family/1.21-1.21.3"   : ["1.21", "1.21.3"],
+        "loaders/forge-family/1.21.3-1.21.8" : ["1.21.3", "1.21.5", "1.21.8"],
+        "loaders/forge-family/1.21.5-1.21.8" : ["1.21.5", "1.21.8"],
+        "loaders/forge-family/1.21.5-1.21.10": ["1.21.5", "1.21.8", "1.21.10"],
+        "loaders/forge-family/1.21.5-1.21.11": ["1.21.5", "1.21.8", "1.21.10", "1.21.11"],
+        "loaders/forge-family/1.21"           : ["1.21"],
+        "loaders/forge-family/1.21.10"        : ["1.21.10"],
+        "loaders/forge-family/1.21.11"        : ["1.21.11"],
+        "loaders/forge-family/26.1"           : ["26.1"],
+        "loaders/forge-family/current"        : ["1.21.11", "26.1"],
+]
+
+def resourceVersion = [
+        "1.21"   : "1.21",
+        "1.21.3" : "1.21.2",
+        "1.21.5" : "1.21.5",
+        "1.21.8" : "1.21.8",
+        "1.21.10": "1.21.10",
+        "1.21.11": "1.21.11",
+        "26.1"   : "26.1",
+]
+
+subprojects {
+    plugins.withId("java") {
+        def variant = project.name
+        def sharedJavaDirs = sharedJavaLayers.findAll { it.value.contains(variant) }
+                .collect { new File(workspaceRoot, "common/src/${it.key}/java") }
+
+        sourceSets.main.java.srcDir(new File(workspaceRoot, "common/src/main/java"))
+        sourceSets.main.java.srcDirs(sharedJavaDirs)
+        sourceSets.main.resources.srcDir(new File(workspaceRoot, "common/src/main/resources"))
+        sourceSets.main.resources.srcDir(new File(workspaceRoot, "neoforge/${resourceVersion[variant]}/src/main/resources"))
+    }
+}

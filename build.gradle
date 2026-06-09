@@ -2,7 +2,122 @@ allprojects {
     group = "dev.gdlev"
 }
 
-def modVersion = "1.4"
+def allVariants = [
+        "fabric/1.21", "fabric/1.21.2", "fabric/1.21.5", "fabric/1.21.8",
+        "fabric/1.21.10", "fabric/1.21.11", "fabric/26.1",
+        "neoforge/1.21", "neoforge/1.21.2", "neoforge/1.21.5", "neoforge/1.21.8",
+        "neoforge/1.21.10", "neoforge/1.21.11", "neoforge/26.1",
+        "forge/1.21", "forge/1.21.3", "forge/1.21.5", "forge/1.21.8",
+        "forge/1.21.10", "forge/1.21.11", "forge/26.1",
+]
+
+def sharedJavaLayers = [
+        "minecraft"                         : allVariants,
+
+        "versions/1.21"                     : ["fabric/1.21", "neoforge/1.21", "forge/1.21"],
+        "versions/1.21.2"                   : ["fabric/1.21.2", "neoforge/1.21.2", "forge/1.21.3"],
+        "versions/1.21.5"                   : ["fabric/1.21.5", "neoforge/1.21.5", "forge/1.21.5"],
+        "versions/1.21.8"                   : ["fabric/1.21.8", "neoforge/1.21.8", "forge/1.21.8"],
+        "versions/1.21.10"                  : ["fabric/1.21.10", "neoforge/1.21.10", "forge/1.21.10"],
+        "versions/1.21.11"                  : ["fabric/1.21.11", "neoforge/1.21.11", "forge/1.21.11"],
+        "versions/26.1"                     : ["fabric/26.1", "neoforge/26.1", "forge/26.1"],
+        "versions/1.21-1.21.8"              : ["fabric/1.21", "fabric/1.21.2", "fabric/1.21.5", "fabric/1.21.8",
+                                                "neoforge/1.21", "neoforge/1.21.2", "neoforge/1.21.5", "neoforge/1.21.8",
+                                                "forge/1.21", "forge/1.21.3", "forge/1.21.5", "forge/1.21.8"],
+        "versions/1.21.5-1.21.11"           : ["fabric/1.21.5", "fabric/1.21.8", "fabric/1.21.10", "fabric/1.21.11",
+                                                "neoforge/1.21.5", "neoforge/1.21.8", "neoforge/1.21.10", "neoforge/1.21.11",
+                                                "forge/1.21.5", "forge/1.21.8", "forge/1.21.10", "forge/1.21.11"],
+        "versions/1.21.10-1.21.11"          : ["fabric/1.21.10", "fabric/1.21.11", "neoforge/1.21.10", "neoforge/1.21.11",
+                                                "forge/1.21.10", "forge/1.21.11"],
+
+        "loaders/fabric/all"                 : allVariants.findAll { it.startsWith("fabric/") },
+        "loaders/fabric/legacy"              : ["fabric/1.21", "fabric/1.21.2", "fabric/1.21.5", "fabric/1.21.8"],
+        "loaders/fabric/pre-1.21.11"         : ["fabric/1.21", "fabric/1.21.2", "fabric/1.21.5", "fabric/1.21.8", "fabric/1.21.10"],
+        "loaders/fabric/current"             : ["fabric/1.21.11", "fabric/26.1"],
+        "loaders/fabric/1.21-1.21.2"         : ["fabric/1.21", "fabric/1.21.2"],
+        "loaders/fabric/1.21-1.21.5"         : ["fabric/1.21", "fabric/1.21.2", "fabric/1.21.5"],
+        "loaders/fabric/1.21.5-1.21.8"       : ["fabric/1.21.5", "fabric/1.21.8"],
+        "loaders/fabric/1.21-1.21.11"        : ["fabric/1.21", "fabric/1.21.2", "fabric/1.21.5", "fabric/1.21.8", "fabric/1.21.10", "fabric/1.21.11"],
+        "loaders/fabric/1.21.5-1.21.11"      : ["fabric/1.21.5", "fabric/1.21.8", "fabric/1.21.10", "fabric/1.21.11"],
+
+        "loaders/neoforge/all"               : allVariants.findAll { it.startsWith("neoforge/") },
+        "loaders/neoforge/pre-1.21.11"       : ["neoforge/1.21", "neoforge/1.21.2", "neoforge/1.21.5", "neoforge/1.21.8", "neoforge/1.21.10"],
+        "loaders/neoforge/current"           : ["neoforge/1.21.11", "neoforge/26.1"],
+        "loaders/neoforge/1.21-1.21.2"       : ["neoforge/1.21", "neoforge/1.21.2"],
+
+        "loaders/forge/all"                  : allVariants.findAll { it.startsWith("forge/") },
+        "loaders/forge/pre-1.21.11"          : ["forge/1.21.3", "forge/1.21.5", "forge/1.21.8", "forge/1.21.10"],
+        "loaders/forge/current"              : ["forge/1.21.11", "forge/26.1"],
+        "loaders/forge/1.21"                 : ["forge/1.21"],
+        "loaders/forge/1.21-1.21.3"          : ["forge/1.21", "forge/1.21.3"],
+        "loaders/forge/1.21-1.21.5"          : ["forge/1.21", "forge/1.21.3", "forge/1.21.5"],
+        "loaders/forge/1.21.5-1.21.8"        : ["forge/1.21.5", "forge/1.21.8"],
+        "loaders/forge/1.21.5-1.21.11"       : ["forge/1.21.5", "forge/1.21.8", "forge/1.21.10", "forge/1.21.11"],
+        "loaders/forge/1.21.8-1.21.11"       : ["forge/1.21.8", "forge/1.21.10", "forge/1.21.11"],
+
+        "loaders/forge-family/all"           : allVariants.findAll { it.startsWith("neoforge/") || it.startsWith("forge/") },
+        "loaders/forge-family/1.21-1.21.3"   : ["neoforge/1.21", "neoforge/1.21.2", "forge/1.21", "forge/1.21.3"],
+        "loaders/forge-family/1.21.3-1.21.8" : ["neoforge/1.21.2", "neoforge/1.21.5", "neoforge/1.21.8",
+                                                "forge/1.21.3", "forge/1.21.5", "forge/1.21.8"],
+        "loaders/forge-family/1.21.5-1.21.8" : ["neoforge/1.21.5", "neoforge/1.21.8", "forge/1.21.5", "forge/1.21.8"],
+        "loaders/forge-family/1.21.5-1.21.10": ["neoforge/1.21.5", "neoforge/1.21.8", "neoforge/1.21.10",
+                                                "forge/1.21.5", "forge/1.21.8", "forge/1.21.10"],
+        "loaders/forge-family/1.21.5-1.21.11": ["neoforge/1.21.5", "neoforge/1.21.8", "neoforge/1.21.10", "neoforge/1.21.11",
+                                                "forge/1.21.5", "forge/1.21.8", "forge/1.21.10", "forge/1.21.11"],
+        "loaders/forge-family/1.21"          : ["neoforge/1.21", "forge/1.21"],
+        "loaders/forge-family/1.21.10"       : ["neoforge/1.21.10", "forge/1.21.10"],
+        "loaders/forge-family/1.21.11"       : ["neoforge/1.21.11", "forge/1.21.11"],
+        "loaders/forge-family/26.1"          : ["neoforge/26.1", "forge/26.1"],
+        "loaders/forge-family/current"       : ["neoforge/1.21.11", "neoforge/26.1", "forge/1.21.11", "forge/26.1"],
+]
+
+def forgeResourceVersion = [
+        "forge/1.21"   : "1.21",
+        "forge/1.21.3" : "1.21.2",
+        "forge/1.21.5" : "1.21.5",
+        "forge/1.21.8" : "1.21.8",
+        "forge/1.21.10": "1.21.10",
+        "forge/1.21.11": "1.21.11",
+        "forge/26.1"   : "26.1",
+]
+
+subprojects {
+    plugins.withId("java") {
+        def variant = project.path.substring(1).replace(":", "/")
+        def sharedJavaDirs = sharedJavaLayers.findAll { it.value.contains(variant) }
+                .collect { rootProject.file("common/src/${it.key}/java") }
+
+        if (project.path.startsWith(":fabric:")) {
+            afterEvaluate {
+                sourceSets.client.java.srcDir(rootProject.file("common/src/main/java"))
+                sourceSets.client.java.srcDirs(sharedJavaDirs)
+                sourceSets.client.resources.srcDir(rootProject.file("common/src/main/resources"))
+
+                tasks.matching { it.name.startsWith("run") }.configureEach {
+                    doFirst {
+                        layout.buildDirectory.dir("classes/java/main").get().asFile.mkdirs()
+                        layout.buildDirectory.dir("resources/main").get().asFile.mkdirs()
+                    }
+                }
+            }
+        }
+
+        if (project.path.startsWith(":neoforge:")) {
+            sourceSets.main.java.srcDir(rootProject.file("common/src/main/java"))
+            sourceSets.main.java.srcDirs(sharedJavaDirs)
+            sourceSets.main.resources.srcDir(rootProject.file("common/src/main/resources"))
+        }
+
+        if (project.path.startsWith(":forge:")) {
+            sourceSets.main.java.srcDir(rootProject.file("common/src/main/java"))
+            sourceSets.main.java.srcDirs(sharedJavaDirs)
+            sourceSets.main.resources.srcDir(rootProject.file("common/src/main/resources"))
+            sourceSets.main.resources.srcDir(rootProject.file("neoforge/${forgeResourceVersion[variant]}/src/main/resources"))
+        }
+    }
+}
+
+def modVersion = "1.4.1"
 def versions = [
         "fabric/26.1",
         "fabric/1.21.11",
@@ -19,34 +134,26 @@ def versions = [
         "neoforge/1.21.5",
         "neoforge/1.21.2",
         "neoforge/1.21",
+
+        "forge/26.1",
+        "forge/1.21.11",
+        "forge/1.21.10",
+        "forge/1.21.8",
+        "forge/1.21.5",
+        "forge/1.21.3",
+        "forge/1.21",
 ]
 
 def mcVersionRanges = [
         "1.21": "1.21-1.21.1",
         "1.21.2": "1.21.2-1.21.4",
+        "1.21.3": "1.21.2-1.21.4",
         "1.21.5": "1.21.5",
         "1.21.8" : "1.21.6-1.21.8",
         "1.21.10": "1.21.9-1.21.10",
         "1.21.11": "1.21.11",
         "26.1"   : "26.1-26.1.2"
 ]
-
-tasks.register('copyAssets') {
-    doLast {
-        def sourceDir = 'template/resources/assets/better_screenshots'
-
-        versions.each { v ->
-            def loader = v.tokenize('/')[0]
-
-            def sourceSet = (loader == 'neoforge') ? 'main' : 'client'
-
-            copy {
-                from sourceDir
-                into "${v}/src/${sourceSet}/resources/assets/better_screenshots"
-            }
-        }
-    }
-}
 
 tasks.register('updateModVersions') {
     doLast {
@@ -65,6 +172,68 @@ tasks.register('updateModVersions') {
                 )
 
                 file.text = updated
+            }
+        }
+    }
+}
+
+def rootBuildTasks = versions
+        .findAll { !it.startsWith("forge/") }
+        .collect { ":${it.replace('/', ':')}:build" }
+
+def forgeBuildTasks = versions
+        .findAll { it.startsWith("forge/") }
+        .collect { ":${it.tokenize('/')[1]}:build" }
+
+tasks.register('cleanBuilds', Delete) {
+    group = "build"
+    description = "Deletes collected release JARs from the root builds directory."
+    delete layout.projectDirectory.dir("builds")
+}
+
+tasks.register('buildForgeAll', Exec) {
+    group = "build"
+    description = "Builds every Forge variant using the nested Forge Gradle build."
+    workingDir file("forge")
+    commandLine(["./gradlew"] + forgeBuildTasks + ["--no-daemon", "--configure-on-demand"])
+}
+
+tasks.register('buildAll') {
+    group = "build"
+    description = "Builds every loader and collects release JARs in builds/<loader>."
+
+    dependsOn tasks.named('cleanBuilds')
+    dependsOn rootBuildTasks
+    dependsOn tasks.named('buildForgeAll')
+
+    doLast {
+        versions.each { variant ->
+            def loader = variant.tokenize('/')[0]
+            def propertiesFile = file("${variant}/gradle.properties")
+            def variantProperties = new Properties()
+
+            propertiesFile.withInputStream {
+                variantProperties.load(it)
+            }
+
+            def expectedVersion = variantProperties.getProperty("mod_version")
+            def candidates = fileTree("${variant}/build/libs") {
+                include "*.jar"
+                exclude "*-sources.jar"
+            }.files.findAll {
+                it.name.contains("-${expectedVersion}.jar")
+            }
+
+            if (candidates.size() != 1) {
+                throw new GradleException(
+                        "Expected exactly one release JAR for ${variant} version ${expectedVersion}, " +
+                                "but found: ${candidates*.name}"
+                )
+            }
+
+            copy {
+                from candidates.first()
+                into layout.projectDirectory.dir("builds/${loader}")
             }
         }
     }

@@ -15,7 +15,6 @@ loom {
 
     mods {
         "better_screenshots" {
-            sourceSet sourceSets.main
             sourceSet sourceSets.client
         }
     }
@@ -37,7 +36,7 @@ dependencies {
     implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 }
 
-processResources {
+processClientResources {
     inputs.property "version", project.version
     inputs.property "minecraft_version", project.minecraft_version
     inputs.property "minecraft_version_depend", project.minecraft_version_depend
@@ -60,6 +59,7 @@ tasks.withType(JavaCompile).configureEach {
 java {
     withSourcesJar()
 
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
     sourceCompatibility = JavaVersion.VERSION_25
     targetCompatibility = JavaVersion.VERSION_25
 }

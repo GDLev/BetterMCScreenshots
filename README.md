@@ -89,33 +89,58 @@ All without ever leaving the game.
 
 ## 🔧 Installation
 
-1. Install fabric mod loader (and fabric api mod)
+1. Install a supported loader: Fabric (with Fabric API), NeoForge, or Forge.
 2. Download the mod from [Modrinth](https://modrinth.com/mod/better-mc-screenshots).
 3. Drop the mod into your `mods` folder
 4. Launch the game and you're ready to go
 
 ## 🛠️ Development
 
+The project uses layered shared sources:
+
+```text
+common/src/main/                    Loader-independent Java and shared assets
+common/src/minecraft/               Code shared by every version and loader
+common/src/versions/<range>/        Code shared by loaders for a version range
+common/src/loaders/<loader>/<range> Code shared by versions of one loader
+common/src/loaders/forge-family/    Code shared by Forge and NeoForge
+fabric/<version>/                   Fabric client-only exceptions
+neoforge/<version>/                 NeoForge-only exceptions
+forge/<version>/                    Forge-only exceptions and standalone build
+```
+
+The root Gradle build selects the correct layers for Fabric and NeoForge.
+Forge uses its own wrapper in `forge/` because ForgeGradle requires a different
+Gradle setup.
+
 To build the project using Gradle, run the following commands in the project root, depending on your Minecraft version:
 
 ```bash
-./gradlew build            # All versions
+./gradlew buildAll                          # All versions
 
-./gradlew fabric:1.21:build         # version Fabric 1.21 - 1.21.1
-./gradlew fabric:1.21.2:build       # version Fabric 1.21.2 - 1.21.4
-./gradlew fabric:1.21.5:build       # version Fabric 1.21.5
-./gradlew fabric:1.21.8:build       # version Fabric 1.21.6 - 1.21.8
-./gradlew fabric:1.21.10:build      # version Fabric 1.21.9 - 1.21.10
-./gradlew fabric:1.21.11:build      # version Fabric 1.21.11
-./gradlew fabric:26.1:build         # version Fabric 26.1 - 26.1.2
+./gradlew fabric:1.21:build                 # version Fabric 1.21 - 1.21.1
+./gradlew fabric:1.21.2:build               # version Fabric 1.21.2 - 1.21.4
+./gradlew fabric:1.21.5:build               # version Fabric 1.21.5
+./gradlew fabric:1.21.8:build               # version Fabric 1.21.6 - 1.21.8
+./gradlew fabric:1.21.10:build              # version Fabric 1.21.9 - 1.21.10
+./gradlew fabric:1.21.11:build              # version Fabric 1.21.11
+./gradlew fabric:26.1:build                 # version Fabric 26.1 - 26.1.2
 
-./gradlew neoforge:1.21:build       # version NeoForge 1.21 - 1.21.1
-./gradlew neoforge:1.21.2:build     # version NeoForge 1.21.2 - 1.21.4
-./gradlew neoforge:1.21.5:build     # version NeoForge 1.21.5
-./gradlew neoforge:1.21.8:build     # version NeoForge 1.21.6 - 1.21.8
-./gradlew neoforge:1.21.10:build    # version NeoForge 1.21.9 - 1.21.10
-./gradlew neoforge:1.21.11:build    # version NeoForge 1.21.11
-./gradlew neoforge:26.1:build       # version NeoForge 26.1 - 26.1.2
+./gradlew neoforge:1.21:build               # version NeoForge 1.21 - 1.21.1
+./gradlew neoforge:1.21.2:build             # version NeoForge 1.21.2 - 1.21.4
+./gradlew neoforge:1.21.5:build             # version NeoForge 1.21.5
+./gradlew neoforge:1.21.8:build             # version NeoForge 1.21.6 - 1.21.8
+./gradlew neoforge:1.21.10:build            # version NeoForge 1.21.9 - 1.21.10
+./gradlew neoforge:1.21.11:build            # version NeoForge 1.21.11
+./gradlew neoforge:26.1:build               # version NeoForge 26.1 - 26.1.2
+
+./forge/gradlew -p forge :1.21:build        # version Forge 1.21 - 1.21.1
+./forge/gradlew -p forge :1.21.3:build      # version Forge 1.21.3 - 1.21.4
+./forge/gradlew -p forge :1.21.5:build      # version Forge 1.21.5
+./forge/gradlew -p forge :1.21.8:build      # version Forge 1.21.6 - 1.21.8
+./forge/gradlew -p forge :1.21.10:build     # version Forge 1.21.9 - 1.21.10
+./forge/gradlew -p forge :1.21.11:build     # version Forge 1.21.11
+./forge/gradlew -p forge :26.1:build        # version Forge 26.1 - 26.1.2
 ```
 
 ## ❤️ Feedback & Support

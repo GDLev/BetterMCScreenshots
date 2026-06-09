@@ -1,4 +1,8 @@
 pluginManagement {
+    plugins {
+        id 'fabric-loom' version '1.15-SNAPSHOT'
+    }
+
     repositories {
         maven {
             name = 'Fabric'
@@ -9,6 +13,8 @@ pluginManagement {
 }
 
 rootProject.name = "better-screenshots"
+
+include("common")
 
 include("fabric:26.1")
 include("fabric:1.21.11")

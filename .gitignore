@@ -1,45 +1,52 @@
-# Gradle and Loom
+# Gradle caches and generated output
 .gradle/
 .gradle-user-home/
 .loom/
 build/
-**/build/
+builds/
 bin/
 out/
+repo/
+
+# Minecraft development runs
 .run/
 run/
-**/run/
-**/src/generated/**/.cache/
-!gradle/wrapper/gradle-wrapper.jar
 
-# IDEs
+# Generated source caches
+**/src/generated/**/.cache/
+
+# Java artifacts
+*.class
+*.jar
+
+# Gradle wrappers belonging to the root and nested Forge builds
+!gradle/wrapper/gradle-wrapper.jar
+!forge/gradle/wrapper/gradle-wrapper.jar
+
+# JVM crash reports
+hs_err_pid*.log
+replay_pid*.log
+
+# IDEs and editors
 .idea/
+.vscode/
+.settings/
+.apt_generated/
+.eclipse/
 *.iws
 *.iml
 *.ipr
-.vscode/
-.settings/
 .project
 .classpath
 .factorypath
 .springBeans
 .sts4-cache
-.apt_generated
-.eclipse/
 
-# Operating System
+# Operating systems
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# Python (if any)
+# Python tools
 __pycache__/
 *.pyc
-
-# Java and build artifacts
-*.jar
-*.class
-
-# Mod specific
-repo/
-!**/src/**/repo/

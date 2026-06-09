@@ -1,0 +1,27 @@
+pluginManagement {
+    repositories {
+        maven {
+            name = "Forge"
+            url = "https://maven.minecraftforge.net/"
+        }
+        maven {
+            name = "Sponge"
+            url = "https://repo.spongepowered.org/repository/maven-public/"
+        }
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id "org.gradle.toolchains.foojay-resolver-convention" version "1.0.0"
+}
+
+rootProject.name = "better-screenshots-forge"
+
+include("26.1")
+include("1.21.11")
+include("1.21.10")
+include("1.21.8")
+include("1.21.5")
+include("1.21.3")
+include("1.21")

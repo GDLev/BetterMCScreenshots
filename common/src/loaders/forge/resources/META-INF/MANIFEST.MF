@@ -1,0 +1,3 @@
+Manifest-Version: 1.0
+MixinConfigs: better_screenshots.mixins.json,better_screenshots.client.mixins.json,better_screenshots.forge.mixins.json
+
