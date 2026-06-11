@@ -1,3 +1,7 @@
+[![9,041 downloads across all platforms](https://www.modpackindex.com/badge/mod/103869/better-mc-screenshots/downloads.svg)](https://www.modpackindex.com/mod/103869/better-mc-screenshots) 
+[![Supports Minecraft 1.21 – 26.1.2](https://www.modpackindex.com/badge/mod/103869/better-mc-screenshots/version.svg?color=red)](https://www.modpackindex.com/mod/103869/better-mc-screenshots)
+[![Used in 10 modpacks on Modpack Index](https://www.modpackindex.com/badge/mod/103869/better-mc-screenshots/modpacks.svg)](https://www.modpackindex.com/mod/103869/better-mc-screenshots)
+
 # Better MC Screenshots
 
 Make your screenshot experience actually *better*.
