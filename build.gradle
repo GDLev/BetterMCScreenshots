@@ -117,7 +117,7 @@ subprojects {
     }
 }
 
-def modVersion = "1.4.1"
+def modVersion = "1.5"
 def versions = [
         "fabric/26.1",
         "fabric/1.21.11",

@@ -107,12 +107,18 @@ public class ScreenshotPreviewRenderer {
     private static final ResourceLocation ICON_COPY_H  = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/copy_hover.png");
     private static final ResourceLocation ICON_UPLOAD  = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/upload.png");
     private static final ResourceLocation ICON_UPLOAD_H= ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/upload_hover.png");
-    private static final ResourceLocation ICON_CLOSE   = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/close.png");
-    private static final ResourceLocation ICON_CLOSE_H = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/close_hover.png");
+    private static final ResourceLocation ICON_DELETE  = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/delete.png");
+    private static final ResourceLocation ICON_DELETE_H= ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/delete_hover.png");
 
     private static int       hoveredButton = -1;
     private static final int[] btnX        = new int[4];
     private static final int[] btnY        = new int[4];
+    private static final long DOUBLE_CLICK_MS = 300L;
+    private static int previewHitX = -100;
+    private static int previewHitY = -100;
+    private static int previewHitW = 0;
+    private static int previewHitH = 0;
+    private static long lastPreviewClickMs = -1L;
 
     private enum UploadState {
         HIDDEN, UPLOADING, SUCCESS, ERROR
@@ -341,6 +347,7 @@ public class ScreenshotPreviewRenderer {
             if (!cfg.previewAnimationsEnabled() || ce > CLOSE_DURATION_MS) {
                 showUntil = -1; showFrom = -1; closeStart = -1;
                 flashStart = -1; copyFlashStart = -1;
+                clearPreviewHitBounds();
                 return;
             }
             float t    = easeInCubic((float) ce / CLOSE_DURATION_MS);
@@ -355,6 +362,7 @@ public class ScreenshotPreviewRenderer {
             long exitElapsed = now - showUntil;
             if (exitElapsed > EXIT_DURATION_MS) {
                 showUntil = -1; showFrom = -1; flashStart = -1;
+                clearPreviewHitBounds();
                 return;
             }
             if (cfg.previewAnimationsEnabled()) {
@@ -373,6 +381,7 @@ public class ScreenshotPreviewRenderer {
                 }
             } else {
                 showUntil = -1; showFrom = -1; flashStart = -1;
+                clearPreviewHitBounds();
                 return;
             }
 
@@ -395,6 +404,10 @@ public class ScreenshotPreviewRenderer {
         };
 
         int alphaInt = Math.max(0, Math.min(255, (int)(alpha * 255f)));
+        previewHitX = drawX;
+        previewHitY = drawY;
+        previewHitW = drawWidth;
+        previewHitH = drawHeight;
 
         // Frame
         context.fill(drawX - 1, drawY - 1,
@@ -470,12 +483,12 @@ public class ScreenshotPreviewRenderer {
                         hoveredButton == 0 ? ICON_SHOW_H   : ICON_SHOW,
                         hoveredButton == 1 ? ICON_COPY_H   : ICON_COPY,
                         hoveredButton == 2 ? ICON_UPLOAD_H : ICON_UPLOAD,
-                        hoveredButton == 3 ? ICON_CLOSE_H  : ICON_CLOSE
+                        hoveredButton == 3 ? ICON_DELETE_H : ICON_DELETE
                 }
                 : new ResourceLocation[] {
                         hoveredButton == 0 ? ICON_SHOW_H  : ICON_SHOW,
                         hoveredButton == 1 ? ICON_COPY_H  : ICON_COPY,
-                        hoveredButton == 2 ? ICON_CLOSE_H : ICON_CLOSE
+                        hoveredButton == 2 ? ICON_DELETE_H: ICON_DELETE
                 };
         for (int i = 0; i < visibleButtons; i++) {
             context.blit(RenderType::guiTextured, icons[i],
@@ -542,34 +555,60 @@ public class ScreenshotPreviewRenderer {
         if (showUntil != -1 && System.currentTimeMillis() > showUntil) return false;
 
         ScreenshotConfig cfg = ScreenshotConfig.get();
-        if (cfg.hideMiniPreviewActionButtons) return false;
-        boolean showUploadButton = ScreenshotUploader.isUploaderEnabled() && !cfg.uploadAutoUpload;
-        int visibleButtons = showUploadButton ? 4 : 3;
+        if (!cfg.hideMiniPreviewActionButtons) {
+            boolean showUploadButton = ScreenshotUploader.isUploaderEnabled() && !cfg.uploadAutoUpload;
+            int visibleButtons = showUploadButton ? 4 : 3;
 
-        for (int i = 0; i < visibleButtons; i++) {
-            if (btnX[i] == 0 && btnY[i] == 0) continue;
-            if (mouseX >= btnX[i] && mouseX <= btnX[i] + BTN_W
-                    && mouseY >= btnY[i] && mouseY <= btnY[i] + BTN_H) {
-                if (showUploadButton) {
+            for (int i = 0; i < visibleButtons; i++) {
+                if (btnX[i] == 0 && btnY[i] == 0) continue;
+                if (mouseX >= btnX[i] && mouseX <= btnX[i] + BTN_W
+                        && mouseY >= btnY[i] && mouseY <= btnY[i] + BTN_H) {
                     playActionButtonClickSound();
-                    switch (i) {
-                        case 0 -> openFullscreen();
-                        case 1 -> copyToClipboard();
-                        case 2 -> uploadCurrentPreview();
-                        case 3 -> close();
+                    if (showUploadButton) {
+                        switch (i) {
+                            case 0 -> openFullscreen();
+                            case 1 -> copyToClipboard();
+                            case 2 -> uploadCurrentPreview();
+                            case 3 -> deleteCurrentPreview();
+                        }
+                    } else {
+                        switch (i) {
+                            case 0 -> openFullscreen();
+                            case 1 -> copyToClipboard();
+                            case 2 -> deleteCurrentPreview();
+                        }
                     }
-                } else {
-                    playActionButtonClickSound();
-                    switch (i) {
-                        case 0 -> openFullscreen();
-                        case 1 -> copyToClipboard();
-                        case 2 -> close();
-                    }
+                    return true;
                 }
-                return true;
             }
         }
+
+        if (isInsidePreview(mouseX, mouseY)) {
+            long now = System.currentTimeMillis();
+            if (lastPreviewClickMs > 0 && now - lastPreviewClickMs <= DOUBLE_CLICK_MS) {
+                lastPreviewClickMs = -1L;
+                playActionButtonClickSound();
+                openFullscreen();
+                return true;
+            }
+            lastPreviewClickMs = now;
+            return true;
+        }
         return false;
+    }
+
+    private static boolean isInsidePreview(double mouseX, double mouseY) {
+        return previewHitW > 0 && previewHitH > 0
+                && mouseX >= previewHitX && mouseX <= previewHitX + previewHitW
+                && mouseY >= previewHitY && mouseY <= previewHitY + previewHitH;
+    }
+
+    private static void clearPreviewHitBounds() {
+        previewHitX = -100;
+        previewHitY = -100;
+        previewHitW = 0;
+        previewHitH = 0;
+        lastPreviewClickMs = -1L;
     }
 
     private static void playActionButtonClickSound() {
@@ -663,5 +702,26 @@ public class ScreenshotPreviewRenderer {
             }
         }
         ScreenshotUploader.uploadWithClientFeedback(file, id, true);
+    }
+
+    private static void deleteCurrentPreview() {
+        java.io.File file = currentPreviewFile;
+        if (file == null || !file.exists()) {
+            java.io.File dir = new java.io.File(Minecraft.getInstance().gameDirectory, "screenshots");
+            java.io.File[] found = dir.listFiles(f -> f.isFile() && f.getName().toLowerCase().endsWith(".png"));
+            if (found != null && found.length > 0) {
+                java.util.Arrays.sort(found, java.util.Comparator.comparingLong(java.io.File::lastModified).reversed());
+                file = found[0];
+            }
+        }
+        if (file != null && file.exists() && file.delete()) {
+            if (currentPreviewId != null && !currentPreviewId.isBlank()) {
+                pendingFiles.remove(currentPreviewId);
+                uploadedUrls.remove(currentPreviewId);
+            }
+            currentPreviewFile = null;
+            currentPreviewId = null;
+            close();
+        }
     }
 }

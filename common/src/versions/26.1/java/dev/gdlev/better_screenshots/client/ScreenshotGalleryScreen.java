@@ -66,6 +66,9 @@ public class ScreenshotGalleryScreen extends Screen {
 
     private boolean pendingExternalRefresh = false;
     private final Map<String, ThumbUploadOverlay> thumbUploadStates = new HashMap<>();
+    private static final long DOUBLE_CLICK_MS = 300L;
+    private int lastClickedThumbIdx = -1;
+    private long lastThumbClickMs = -1L;
 
     private enum ThumbUploadState {
         UPLOADING, SUCCESS, ERROR
@@ -290,6 +293,21 @@ public class ScreenshotGalleryScreen extends Screen {
             if (mouseX >= x && mouseX <= x + THUMB_W
                     && mouseY >= y && mouseY <= y + THUMB_H
                     && mouseY >= topPad && mouseY <= bottomY) {
+                long now = System.currentTimeMillis();
+                if (lastClickedThumbIdx == i
+                        && lastThumbClickMs > 0
+                        && now - lastThumbClickMs <= DOUBLE_CLICK_MS) {
+                    selectedIdx = i;
+                    marqueeIdx = -1;
+                    refreshActionButtons();
+                    lastClickedThumbIdx = -1;
+                    lastThumbClickMs = -1L;
+                    playActionButtonClickSound();
+                    openFullscreen(i);
+                    return true;
+                }
+                lastClickedThumbIdx = i;
+                lastThumbClickMs = now;
                 selectedIdx = (selectedIdx == i) ? -1 : i;
                 marqueeIdx  = -1;
                 refreshActionButtons();

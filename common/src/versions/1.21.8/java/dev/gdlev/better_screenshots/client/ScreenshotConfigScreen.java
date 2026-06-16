@@ -58,6 +58,9 @@ public class ScreenshotConfigScreen extends Screen {
     private static final long UPLOAD_STATE_HOLD_MS = 1400L;
 
     private int selectedThumbIdx = -1;
+    private static final long DOUBLE_CLICK_MS = 300L;
+    private int lastClickedThumbIdx = -1;
+    private long lastThumbClickMs = -1L;
 
     private boolean pendingExternalRefresh = false;
 
@@ -536,6 +539,19 @@ public class ScreenshotConfigScreen extends Screen {
 
             if (mouseX >= tx && mouseX <= tx + tw
                     && mouseY >= tty && mouseY <= tty + th) {
+                long now = System.currentTimeMillis();
+                if (lastClickedThumbIdx == i
+                        && lastThumbClickMs > 0
+                        && now - lastThumbClickMs <= DOUBLE_CLICK_MS) {
+                    selectedThumbIdx = i;
+                    lastClickedThumbIdx = -1;
+                    lastThumbClickMs = -1L;
+                    playActionButtonClickSound();
+                    openFullscreen(i);
+                    return true;
+                }
+                lastClickedThumbIdx = i;
+                lastThumbClickMs = now;
                 selectedThumbIdx = (selectedThumbIdx == i) ? -1 : i;
                 return true;
             }

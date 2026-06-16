@@ -50,6 +50,8 @@ public class ScreenshotFullscreenScreen extends Screen {
     private static final Identifier ICON_UPLOAD_H = Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/upload_hover.png");
     private static final Identifier ICON_DELETE   = Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/delete.png");
     private static final Identifier ICON_DELETE_H = Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/delete_hover.png");
+    private static final Identifier ICON_CLOSE    = Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/close.png");
+    private static final Identifier ICON_CLOSE_H  = Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/close_hover.png");
 
     private static final int ACT_BTN_W   = 12;
     private static final int ACT_BTN_H   = 15;
@@ -235,6 +237,17 @@ public class ScreenshotFullscreenScreen extends Screen {
         closeStart = System.currentTimeMillis();
     }
 
+    private void closeLikeEscape() {
+        if (!loaded || expectedTexture == null || expectedTexture.getPixels() == null) {
+            this.minecraft.setScreen(parent);
+        } else if (!ScreenshotConfig.get().uiAnimationsEnabled()) {
+            this.minecraft.setScreen(parent);
+        } else {
+            startClose();
+        }
+    }
+
+
     // ── Navigation & File Management ──────────────────────────────────────────
 
     private boolean hasPrev() { return currentFileIndex > 0; }
@@ -355,15 +368,24 @@ public class ScreenshotFullscreenScreen extends Screen {
     private void drawActionButtons(GuiGraphicsExtractor context,
                                    int imgX, int imgY, int imgW, int imgH,
                                    double mouseX, double mouseY) {
-        if (screenshotFiles.isEmpty() || currentFileIndex < 0) return;
         float alpha = arrowAlpha();
         if (alpha <= 0f) return;
+
+        int btnsY      = imgY + 8;
+
+        int closeX = imgX + 8;
+        int closeY = btnsY;
+        boolean closeHov = mouseX >= closeX && mouseX <= closeX + ACT_BTN_W
+                && mouseY >= closeY && mouseY <= closeY + ACT_BTN_H;
+        context.blit(RenderPipelines.GUI_TEXTURED, closeHov ? ICON_CLOSE_H : ICON_CLOSE,
+                closeX, closeY, 0f, 0f, ACT_BTN_W, ACT_BTN_H, ACT_BTN_W, ACT_BTN_H);
+
+        if (screenshotFiles.isEmpty() || currentFileIndex < 0) return;
 
         boolean showUploadAction = ScreenshotUploader.isUploaderEnabled();
         int visibleButtons = showUploadAction ? 3 : 2;
         int totalBtnsW = visibleButtons * ACT_BTN_W;
         int btnsStartX = imgX + imgW - totalBtnsW - 8; // 8px marginesu od krawędzi zdjęcia
-        int btnsY      = imgY + 8;
 
         // Ikona Copy
         int copyX = btnsStartX;
@@ -463,8 +485,8 @@ public class ScreenshotFullscreenScreen extends Screen {
         }
 
         if (parent != null) {
-            parent.extractBackground(context, mouseX, mouseY, delta);
-            parent.extractRenderState(context, mouseX, mouseY, delta);
+            parent.extractBackground(context, -1, -1, delta);
+            parent.extractRenderState(context, -1, -1, delta);
         } else {
             super.extractBackground(context, mouseX, mouseY, delta);
         }
@@ -685,7 +707,6 @@ public class ScreenshotFullscreenScreen extends Screen {
     public boolean handleNavClick(double mouseX, double mouseY) {
         if (!loaded || expectedTexture == null || expectedTexture.getPixels() == null) return false;
         if (closing || navLoading) return false;
-        if (screenshotFiles.isEmpty() || currentFileIndex < 0) return false;
         if (imageFullyShownAt < 0) return false;
 
         var img = expectedTexture;
@@ -701,12 +722,24 @@ public class ScreenshotFullscreenScreen extends Screen {
         int targetX  = (this.width  - targetW) / 2;
         int targetY  = (this.height - targetH) / 2;
 
+        int btnsY      = targetY + 8;
+
+        int closeX = targetX + 8;
+        int closeY = btnsY;
+        if (mouseX >= closeX && mouseX <= closeX + ACT_BTN_W
+                && mouseY >= closeY && mouseY <= closeY + ACT_BTN_H) {
+            playActionButtonClickSound();
+            closeLikeEscape();
+            return true;
+        }
+
+        if (screenshotFiles.isEmpty() || currentFileIndex < 0) return false;
+
         // 1. Sprawdzanie przycisków akcji
         boolean showUploadAction = ScreenshotUploader.isUploaderEnabled();
         int visibleButtons = showUploadAction ? 3 : 2;
         int totalBtnsW = visibleButtons * ACT_BTN_W;
         int btnsStartX = targetX + targetW - totalBtnsW - 8;
-        int btnsY      = targetY + 12;
 
         int copyX = btnsStartX;
         if (mouseX >= copyX && mouseX <= copyX + ACT_BTN_W
@@ -779,13 +812,7 @@ public class ScreenshotFullscreenScreen extends Screen {
         }
 
         if (key == 256) { // ESC
-            if (!loaded || expectedTexture == null || expectedTexture.getPixels() == null) {
-                this.minecraft.setScreen(parent);
-            } else if (!ScreenshotConfig.get().uiAnimationsEnabled()) {
-                this.minecraft.setScreen(parent);
-            } else {
-                startClose();
-            }
+            closeLikeEscape();
             return true;
         }
         return super.keyPressed(input);
