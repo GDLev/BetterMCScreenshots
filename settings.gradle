@@ -16,6 +16,7 @@ rootProject.name = "better-screenshots"
 
 include("common")
 
+include("fabric:26.2")
 include("fabric:26.1")
 include("fabric:1.21.11")
 include("fabric:1.21.10")
@@ -25,6 +26,7 @@ include("fabric:1.21.2")
 include("fabric:1.21")
 
 include("neoforge:26.1")
+include("neoforge:26.2")
 include("neoforge:1.21.11")
 include("neoforge:1.21.10")
 include("neoforge:1.21.8")

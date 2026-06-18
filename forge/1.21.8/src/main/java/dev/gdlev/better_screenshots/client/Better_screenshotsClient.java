@@ -67,9 +67,7 @@ public class Better_screenshotsClient {
             }
         }
 
-        if (!(mc.screen instanceof ScreenshotGalleryScreen)
-                && !(mc.screen instanceof ScreenshotFullscreenScreen)
-                && !(mc.screen instanceof ScreenshotConfigScreen)) {
+        if (mc.screen == null || mc.screen instanceof net.minecraft.client.gui.screens.ChatScreen) {
             if (button == 0) {
                 double previewMouseX = mc.mouseHandler.xpos() * mc.getWindow().getGuiScaledWidth() / mc.getWindow().getScreenWidth();
                 double previewMouseY = mc.mouseHandler.ypos() * mc.getWindow().getGuiScaledHeight() / mc.getWindow().getScreenHeight();

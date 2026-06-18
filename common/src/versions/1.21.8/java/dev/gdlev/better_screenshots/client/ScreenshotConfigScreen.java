@@ -194,10 +194,11 @@ public class ScreenshotConfigScreen extends Screen {
                             case TOP_LEFT     -> "better_screenshots.config.menu_button.top_left";
                             case BOTTOM_RIGHT -> "better_screenshots.config.menu_button.bottom_right";
                             case BOTTOM_LEFT  -> "better_screenshots.config.menu_button.bottom_left";
+                            case CENTER       -> "better_screenshots.config.menu_button.center";
                             case DISABLED     -> "better_screenshots.config.menu_button.disabled";
                         }))
                 .withInitialValue(ScreenshotConfig.get().menuButtonPosition)
-                .withValues(ScreenshotConfig.MenuButtonPosition.values())
+                .withValues(menuButtonPositionValues())
                 .create(lx, ty + 14 + GAP * 6, COL_W, BTN_H,
                         Component.translatable("better_screenshots.config.menu_button"),
                         (btn, val) -> { ScreenshotConfig.get().menuButtonPosition = val; ScreenshotConfig.save(); })));
@@ -802,5 +803,15 @@ public class ScreenshotConfigScreen extends Screen {
 
         context.fill(barX, barY, barX + barW, barY + UPLOAD_BAR_H, 0x66000000);
         context.fill(barX, barY, barX + fillW, barY + UPLOAD_BAR_H, color);
+    }
+
+    private static ScreenshotConfig.MenuButtonPosition[] menuButtonPositionValues() {
+        return new ScreenshotConfig.MenuButtonPosition[] {
+                ScreenshotConfig.MenuButtonPosition.TOP_RIGHT,
+                ScreenshotConfig.MenuButtonPosition.TOP_LEFT,
+                ScreenshotConfig.MenuButtonPosition.BOTTOM_RIGHT,
+                ScreenshotConfig.MenuButtonPosition.BOTTOM_LEFT,
+                ScreenshotConfig.MenuButtonPosition.DISABLED
+        };
     }
 }

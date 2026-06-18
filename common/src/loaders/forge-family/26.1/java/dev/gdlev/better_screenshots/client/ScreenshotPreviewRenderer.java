@@ -536,6 +536,12 @@ public class ScreenshotPreviewRenderer {
         if (closeStart != -1) return false;
         if (showUntil != -1 && System.currentTimeMillis() > showUntil) return false;
 
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.screen != null && !(mc.screen instanceof net.minecraft.client.gui.screens.ChatScreen)) {
+            lastPreviewClickMs = -1L;
+            return false;
+        }
+
         ScreenshotConfig cfg = ScreenshotConfig.get();
         if (!cfg.hideMiniPreviewActionButtons) {
             boolean showUploadButton = ScreenshotUploader.isUploaderEnabled() && !cfg.uploadAutoUpload;

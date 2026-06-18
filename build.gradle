@@ -4,11 +4,11 @@ allprojects {
 
 def allVariants = [
         "fabric/1.21", "fabric/1.21.2", "fabric/1.21.5", "fabric/1.21.8",
-        "fabric/1.21.10", "fabric/1.21.11", "fabric/26.1",
+        "fabric/1.21.10", "fabric/1.21.11", "fabric/26.1", "fabric/26.2",
         "neoforge/1.21", "neoforge/1.21.2", "neoforge/1.21.5", "neoforge/1.21.8",
-        "neoforge/1.21.10", "neoforge/1.21.11", "neoforge/26.1",
+        "neoforge/1.21.10", "neoforge/1.21.11", "neoforge/26.1", "neoforge/26.2",
         "forge/1.21", "forge/1.21.3", "forge/1.21.5", "forge/1.21.8",
-        "forge/1.21.10", "forge/1.21.11", "forge/26.1",
+        "forge/1.21.10", "forge/1.21.11", "forge/26.1", "forge/26.2",
 ]
 
 def sharedJavaLayers = [
@@ -21,6 +21,7 @@ def sharedJavaLayers = [
         "versions/1.21.10"                  : ["fabric/1.21.10", "neoforge/1.21.10", "forge/1.21.10"],
         "versions/1.21.11"                  : ["fabric/1.21.11", "neoforge/1.21.11", "forge/1.21.11"],
         "versions/26.1"                     : ["fabric/26.1", "neoforge/26.1", "forge/26.1"],
+        "versions/26.2"                     : ["fabric/26.2", "neoforge/26.2", "forge/26.2"],
         "versions/1.21-1.21.8"              : ["fabric/1.21", "fabric/1.21.2", "fabric/1.21.5", "fabric/1.21.8",
                                                 "neoforge/1.21", "neoforge/1.21.2", "neoforge/1.21.5", "neoforge/1.21.8",
                                                 "forge/1.21", "forge/1.21.3", "forge/1.21.5", "forge/1.21.8"],
@@ -34,6 +35,7 @@ def sharedJavaLayers = [
         "loaders/fabric/legacy"              : ["fabric/1.21", "fabric/1.21.2", "fabric/1.21.5", "fabric/1.21.8"],
         "loaders/fabric/pre-1.21.11"         : ["fabric/1.21", "fabric/1.21.2", "fabric/1.21.5", "fabric/1.21.8", "fabric/1.21.10"],
         "loaders/fabric/current"             : ["fabric/1.21.11", "fabric/26.1"],
+        "loaders/fabric/26.2"                : ["fabric/26.2"],
         "loaders/fabric/1.21-1.21.2"         : ["fabric/1.21", "fabric/1.21.2"],
         "loaders/fabric/1.21-1.21.5"         : ["fabric/1.21", "fabric/1.21.2", "fabric/1.21.5"],
         "loaders/fabric/1.21.5-1.21.8"       : ["fabric/1.21.5", "fabric/1.21.8"],
@@ -42,12 +44,13 @@ def sharedJavaLayers = [
 
         "loaders/neoforge/all"               : allVariants.findAll { it.startsWith("neoforge/") },
         "loaders/neoforge/pre-1.21.11"       : ["neoforge/1.21", "neoforge/1.21.2", "neoforge/1.21.5", "neoforge/1.21.8", "neoforge/1.21.10"],
-        "loaders/neoforge/current"           : ["neoforge/1.21.11", "neoforge/26.1"],
+        "loaders/neoforge/current"           : ["neoforge/1.21.11", "neoforge/26.1", "neoforge/26.2"],
         "loaders/neoforge/1.21-1.21.2"       : ["neoforge/1.21", "neoforge/1.21.2"],
 
         "loaders/forge/all"                  : allVariants.findAll { it.startsWith("forge/") },
         "loaders/forge/pre-1.21.11"          : ["forge/1.21.3", "forge/1.21.5", "forge/1.21.8", "forge/1.21.10"],
-        "loaders/forge/current"              : ["forge/1.21.11", "forge/26.1"],
+        "loaders/forge/current"              : ["forge/1.21.11", "forge/26.1", "forge/26.2"],
+        "loaders/forge/26.2"                 : ["forge/26.2"],
         "loaders/forge/1.21"                 : ["forge/1.21"],
         "loaders/forge/1.21-1.21.3"          : ["forge/1.21", "forge/1.21.3"],
         "loaders/forge/1.21-1.21.5"          : ["forge/1.21", "forge/1.21.3", "forge/1.21.5"],
@@ -68,6 +71,7 @@ def sharedJavaLayers = [
         "loaders/forge-family/1.21.10"       : ["neoforge/1.21.10", "forge/1.21.10"],
         "loaders/forge-family/1.21.11"       : ["neoforge/1.21.11", "forge/1.21.11"],
         "loaders/forge-family/26.1"          : ["neoforge/26.1", "forge/26.1"],
+        "loaders/forge-family/26.2"          : ["neoforge/26.2", "forge/26.2"],
         "loaders/forge-family/current"       : ["neoforge/1.21.11", "neoforge/26.1", "forge/1.21.11", "forge/26.1"],
 ]
 
@@ -79,6 +83,7 @@ def forgeResourceVersion = [
         "forge/1.21.10": "1.21.10",
         "forge/1.21.11": "1.21.11",
         "forge/26.1"   : "26.1",
+        "forge/26.2"   : "26.2",
 ]
 
 subprojects {
@@ -117,8 +122,9 @@ subprojects {
     }
 }
 
-def modVersion = "1.5"
+def modVersion = "1.5.1"
 def versions = [
+        "fabric/26.2",
         "fabric/26.1",
         "fabric/1.21.11",
         "fabric/1.21.10",
@@ -128,6 +134,7 @@ def versions = [
         "fabric/1.21",
 
         "neoforge/26.1",
+        "neoforge/26.2",
         "neoforge/1.21.11",
         "neoforge/1.21.10",
         "neoforge/1.21.8",
@@ -136,6 +143,7 @@ def versions = [
         "neoforge/1.21",
 
         "forge/26.1",
+        "forge/26.2",
         "forge/1.21.11",
         "forge/1.21.10",
         "forge/1.21.8",
@@ -152,7 +160,8 @@ def mcVersionRanges = [
         "1.21.8" : "1.21.6-1.21.8",
         "1.21.10": "1.21.9-1.21.10",
         "1.21.11": "1.21.11",
-        "26.1"   : "26.1-26.1.2"
+        "26.1"   : "26.1-26.1.2",
+        "26.2"   : "26.2"
 ]
 
 tasks.register('updateModVersions') {

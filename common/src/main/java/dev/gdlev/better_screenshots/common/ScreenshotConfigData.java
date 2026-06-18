@@ -28,7 +28,7 @@ public class ScreenshotConfigData {
     }
 
     public enum MenuButtonPosition {
-        TOP_RIGHT, TOP_LEFT, BOTTOM_RIGHT, BOTTOM_LEFT, DISABLED
+        CENTER, TOP_RIGHT, TOP_LEFT, BOTTOM_RIGHT, BOTTOM_LEFT, DISABLED
     }
 
     public enum UploadProvider {
@@ -48,6 +48,7 @@ public class ScreenshotConfigData {
     public FlashMode flashMode = FlashMode.PREVIEW;
     public int previewDurationSeconds = 4;
     public MenuButtonPosition menuButtonPosition = MenuButtonPosition.BOTTOM_LEFT;
+    public boolean menuButtonPosition26_2DefaultMigrated = false;
     public int screenshotsFirstRowTopMargin = 0;
     public boolean hideMiniPreviewActionButtons = false;
 

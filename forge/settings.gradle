@@ -19,6 +19,7 @@ plugins {
 rootProject.name = "better-screenshots-forge"
 
 include("26.1")
+include("26.2")
 include("1.21.11")
 include("1.21.10")
 include("1.21.8")

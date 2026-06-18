@@ -23,6 +23,7 @@
   "better_screenshots.config.flash.preview": "Na podglądzie",
   "better_screenshots.config.flash.screen": "Na ekranie",
   "better_screenshots.config.menu_button": "Przyciski w menu",
+  "better_screenshots.config.menu_button.center": "Środek",
   "better_screenshots.config.menu_button.top_right": "Prawy górny",
   "better_screenshots.config.menu_button.top_left": "Lewy górny",
   "better_screenshots.config.menu_button.bottom_right": "Prawy dolny",

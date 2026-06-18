@@ -3,7 +3,7 @@ allprojects {
 }
 
 def workspaceRoot = projectDir.parentFile
-def allVariants = ["1.21", "1.21.3", "1.21.5", "1.21.8", "1.21.10", "1.21.11", "26.1"]
+def allVariants = ["1.21", "1.21.3", "1.21.5", "1.21.8", "1.21.10", "1.21.11", "26.1", "26.2"]
 
 def sharedJavaLayers = [
         "minecraft"                         : allVariants,
@@ -15,6 +15,7 @@ def sharedJavaLayers = [
         "versions/1.21.10"                  : ["1.21.10"],
         "versions/1.21.11"                  : ["1.21.11"],
         "versions/26.1"                     : ["26.1"],
+        "versions/26.2"                     : ["26.2"],
         "versions/1.21-1.21.8"              : ["1.21", "1.21.3", "1.21.5", "1.21.8"],
         "versions/1.21.5-1.21.11"           : ["1.21.5", "1.21.8", "1.21.10", "1.21.11"],
         "versions/1.21.10-1.21.11"          : ["1.21.10", "1.21.11"],
@@ -24,7 +25,8 @@ def sharedJavaLayers = [
         "loaders/forge/1.21"                 : ["1.21"],
         "loaders/forge/1.21.8-1.21.10"       : ["1.21.8", "1.21.10"],
         "loaders/forge/26.1"                  : ["26.1"],
-        "loaders/forge/current"              : ["1.21.11", "26.1"],
+        "loaders/forge/26.2"                  : ["26.2"],
+        "loaders/forge/current"              : ["1.21.11", "26.1", "26.2"],
         "loaders/forge/1.21-1.21.3"          : ["1.21", "1.21.3"],
         "loaders/forge/1.21-1.21.5"          : ["1.21", "1.21.3", "1.21.5"],
         "loaders/forge/1.21.5-1.21.8"        : ["1.21.5", "1.21.8"],
@@ -41,6 +43,7 @@ def sharedJavaLayers = [
         "loaders/forge-family/1.21.10"        : ["1.21.10"],
         "loaders/forge-family/1.21.11"        : ["1.21.11"],
         "loaders/forge-family/26.1"           : ["26.1"],
+        "loaders/forge-family/26.2"           : ["26.2"],
         "loaders/forge-family/current"        : ["1.21.11", "26.1"],
 ]
 
@@ -52,6 +55,7 @@ def resourceVersion = [
         "1.21.10": "1.21.10",
         "1.21.11": "1.21.11",
         "26.1"   : "26.1",
+        "26.2"   : "26.2",
 ]
 
 subprojects {

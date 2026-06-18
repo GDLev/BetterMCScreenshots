@@ -23,6 +23,7 @@
   "better_screenshots.config.flash.preview": "On Preview",
   "better_screenshots.config.flash.screen": "On Screen",
   "better_screenshots.config.menu_button": "Menu Buttons",
+  "better_screenshots.config.menu_button.center": "Center",
   "better_screenshots.config.menu_button.top_right": "Top Right",
   "better_screenshots.config.menu_button.top_left": "Top Left",
   "better_screenshots.config.menu_button.bottom_right": "Bottom Right",

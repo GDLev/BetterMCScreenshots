@@ -20,6 +20,7 @@ public class ScreenshotConfig extends ScreenshotConfigData {
     }
 
     public static void load() {
+        boolean shouldSave = false;
         if (Files.exists(CONFIG_PATH)) {
             try (Reader r = Files.newBufferedReader(CONFIG_PATH)) {
                 instance = GSON.fromJson(r, ScreenshotConfig.class);
@@ -29,21 +30,36 @@ public class ScreenshotConfig extends ScreenshotConfigData {
             }
         } else {
             instance = new ScreenshotConfig();
-            save();
+            shouldSave = true;
         }
 
         // Migration / normalization
         if (instance.animationsMode == null) {
             instance.animationsMode = instance.animations ? AnimationsMode.ON : AnimationsMode.OFF;
+            shouldSave = true;
         }
         instance.animations = instance.animationsMode == AnimationsMode.ON;
 
         if (instance.menuButtonPosition == null) {
+            instance.menuButtonPosition = defaultMenuButtonPosition();
+            shouldSave = true;
+        }
+        if (isMinecraft26_2()) {
+            if (!instance.menuButtonPosition26_2DefaultMigrated) {
+                if (instance.menuButtonPosition == MenuButtonPosition.BOTTOM_LEFT) {
+                    instance.menuButtonPosition = MenuButtonPosition.CENTER;
+                }
+                instance.menuButtonPosition26_2DefaultMigrated = true;
+                shouldSave = true;
+            }
+        } else if (instance.menuButtonPosition == MenuButtonPosition.CENTER) {
             instance.menuButtonPosition = MenuButtonPosition.BOTTOM_LEFT;
+            shouldSave = true;
         }
 
         if (instance.uploadProvider == null) {
             instance.uploadProvider = UploadProvider.DISABLED;
+            shouldSave = true;
         }
         if (!instance.uploadChatNotification) {
             // If chat notification is disabled, copy must stay enabled.
@@ -72,6 +88,21 @@ public class ScreenshotConfig extends ScreenshotConfigData {
         if (instance.customHeaderValue == null) instance.customHeaderValue = "";
         if (instance.customPostKey == null) instance.customPostKey = "";
         if (instance.customPostValue == null) instance.customPostValue = "";
+
+        if (shouldSave) {
+            save();
+        }
+    }
+
+    private static MenuButtonPosition defaultMenuButtonPosition() {
+        return isMinecraft26_2() ? MenuButtonPosition.CENTER : MenuButtonPosition.BOTTOM_LEFT;
+    }
+
+    private static boolean isMinecraft26_2() {
+        return FabricLoader.getInstance()
+                .getModContainer("minecraft")
+                .map(container -> container.getMetadata().getVersion().getFriendlyString().startsWith("26.2"))
+                .orElse(false);
     }
 
     public static void save() {
