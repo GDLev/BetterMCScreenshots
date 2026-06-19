@@ -129,6 +129,7 @@ To build the project using Gradle, run the following commands in the project roo
 ./gradlew fabric:1.21.10:build              # version Fabric 1.21.9 - 1.21.10
 ./gradlew fabric:1.21.11:build              # version Fabric 1.21.11
 ./gradlew fabric:26.1:build                 # version Fabric 26.1 - 26.1.2
+./gradlew fabric:26.2:build                 # version Fabric 26.2
 
 ./gradlew neoforge:1.21:build               # version NeoForge 1.21 - 1.21.1
 ./gradlew neoforge:1.21.2:build             # version NeoForge 1.21.2 - 1.21.4
@@ -137,6 +138,7 @@ To build the project using Gradle, run the following commands in the project roo
 ./gradlew neoforge:1.21.10:build            # version NeoForge 1.21.9 - 1.21.10
 ./gradlew neoforge:1.21.11:build            # version NeoForge 1.21.11
 ./gradlew neoforge:26.1:build               # version NeoForge 26.1 - 26.1.2
+./gradlew neoforge:26.2:build               # version NeoForge 26.2
 
 ./forge/gradlew -p forge :1.21:build        # version Forge 1.21 - 1.21.1
 ./forge/gradlew -p forge :1.21.3:build      # version Forge 1.21.3 - 1.21.4
@@ -145,13 +147,17 @@ To build the project using Gradle, run the following commands in the project roo
 ./forge/gradlew -p forge :1.21.10:build     # version Forge 1.21.9 - 1.21.10
 ./forge/gradlew -p forge :1.21.11:build     # version Forge 1.21.11
 ./forge/gradlew -p forge :26.1:build        # version Forge 26.1 - 26.1.2
+./forge/gradlew -p forge :26.2:build        # version Forge 26.2
 ```
 
 ## ❤️ Feedback & Support
 
-Found a bug? Got an idea?
+Found a bug? Got an idea?  
 Feel free to open an issue or share your suggestions — every bit of feedback helps improve the mod!
 
-If you enjoy the mod, consider leaving a ⭐ on GitHub and following the project on Modrinth — it’s a great motivation to keep improving and adding new features!
+If you enjoy the mod, consider leaving a ⭐ on GitHub, following the project on Modrinth, or supporting me on Ko-fi.  
+It’s a great motivation to keep improving the mod and adding new features!
+
+[![Support me on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/gdlev)
 
 Enjoy your new screenshot experience 📸

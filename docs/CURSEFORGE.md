@@ -1,6 +1,9 @@
 # Better MC Screenshots
+![Supports Minecraft 1.21 – 26.2](https://www.modpackindex.com/badge/mod/103869/better-mc-screenshots/version.svg?style=large&color=red#)
+![9,041 downloads across all platforms](https://www.modpackindex.com/badge/mod/103869/better-mc-screenshots/downloads.svg?style=large#3)
+![Used in 10 modpacks on Modpack Index](https://www.modpackindex.com/badge/mod/103869/better-mc-screenshots/modpacks.svg?style=large#)
 
-Make your screenshot experience actually _better_.
+Make your screenshot experience actually **better**.
 
 This mod upgrades the default Minecraft screenshot system into something modern, fast, and genuinely enjoyable to use — no more tabbing out, digging through folders, or guessing if the shot even saved correctly.
 
@@ -34,8 +37,7 @@ Everything you need is right there, in-game.
 
 ### ☁️ Optional Uploader Integration
 
-> Want to share screenshots even faster?
-You can optionally upload directly from the game using providers like Imgur, S3, Custom HTTP/HTTPS endpoints, or Catbox.
+> Want to share screenshots even faster? You can optionally upload directly from the game using providers like Imgur, S3, Custom HTTP/HTTPS endpoints, or Catbox.
 
 ### 🔊 Custom Screenshot Sound
 
@@ -57,6 +59,8 @@ You can optionally upload directly from the game using providers like Imgur, S3,
 
 > Found a bug? Got an idea? Feel free to open an issue or share your suggestions — every bit of feedback helps improve the mod!
 
-> If you enjoy the mod, consider leaving a ⭐ on GitHub and following the project on CurseForge / Modrinth — it’s a great motivation to keep improving and adding new features!
+> If you enjoy the mod, consider leaving a ⭐ on GitHub or supporting me on Ko-fi — it’s a great motivation to keep improving and adding new features!
+
+[![Support me on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/gdlev)
 
 Enjoy your new screenshot experience 📸
