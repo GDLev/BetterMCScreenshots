@@ -64,7 +64,7 @@ public final class ScreenshotUploader {
                 };
 
                 if (uploadedUrl == null || uploadedUrl.isBlank()) {
-                    throw new IOException("Uploader returned empty URL.");
+                    throw new IOException(Component.translatable("better_screenshots.upload.error.empty_url").getString());
                 }
 
                 listener.onProgress(1.0);
@@ -126,11 +126,12 @@ public final class ScreenshotUploader {
 
         if (screenshotFile == null || !screenshotFile.exists() || !screenshotFile.isFile()) {
             if (updatePreviewIndicator) {
-                ScreenshotPreviewRenderer.markUploadError("File not found");
+                ScreenshotPreviewRenderer.markUploadError(Component.translatable("better_screenshots.upload.error.file_not_found").getString());
             }
             if (cfg.uploadChatNotification && client.player != null) {
                 client.player.sendSystemMessage(Component.translatable(
-                        "better_screenshots.upload.error", "Screenshot file not found"));
+                        "better_screenshots.upload.error",
+                        Component.translatable("better_screenshots.upload.error.screenshot_file_not_found").getString()));
             }
             return;
         }
@@ -232,7 +233,7 @@ public final class ScreenshotUploader {
 
         String url = findUrl(response.body());
         if (url == null) {
-            throw new IOException("Imgur response does not contain uploaded URL.");
+            throw new IOException(Component.translatable("better_screenshots.upload.error.imgur_missing_url").getString());
         }
         return url;
     }
@@ -444,7 +445,7 @@ public final class ScreenshotUploader {
         int code = response.statusCode();
         if (code >= 200 && code < 300) return;
         String body = response.body() == null ? "" : response.body();
-        throw new IOException(provider + " upload failed (" + code + "): " + body);
+        throw new IOException(Component.translatable("better_screenshots.upload.error.http_failed", provider, code, body).getString());
     }
 
     private static String safeMessage(Throwable throwable) {

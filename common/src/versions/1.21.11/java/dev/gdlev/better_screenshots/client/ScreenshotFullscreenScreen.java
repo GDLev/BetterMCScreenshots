@@ -478,14 +478,20 @@ public class ScreenshotFullscreenScreen extends Screen {
         if (parent instanceof ScreenshotGalleryScreen) {
             DynamicTexture bgTex = ScreenshotPreviewRenderer.getBackgroundTexture();
             if (bgTex != null && bgTex.getPixels() != null) {
-            context.blit(RenderPipelines.GUI_TEXTURED, ScreenshotPreviewRenderer.BACKGROUND_ID,
-                    0, 0, 0f, 0f, this.width, this.height,
-                    this.width, this.height);
-                return;
+                NativeImage pixels = bgTex.getPixels();
+                if (pixels.getWidth() == this.width && pixels.getHeight() == this.height) {
+                    context.blit(RenderPipelines.GUI_TEXTURED, ScreenshotPreviewRenderer.BACKGROUND_ID,
+                            0, 0, 0f, 0f, this.width, this.height,
+                            pixels.getWidth(), pixels.getHeight());
+                    return;
+                }
             }
         }
 
         if (parent != null) {
+            if (parent.width != this.width || parent.height != this.height) {
+                parent.resize(this.width, this.height);
+            }
             parent.renderBackground(context, -1, -1, delta);
             parent.render(context, -1, -1, delta);
         } else {

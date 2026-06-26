@@ -4,28 +4,36 @@ import com.mojang.blaze3d.platform.NativeImage;
 import java.io.File;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.resources.sounds.SimpleSoundInstance;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.sounds.SoundEvents;
 
 public class ScreenshotGalleryScreen extends Screen {
 
     private final Screen parent;
 
-    private static final int COLS       = 4;
-    private static final int THUMB_W    = 80;
-    private static final int THUMB_H    = 45;
-    private static final int THUMB_GAP  = 6;
+    private static final int MIN_THUMB_W = 112;
+    private static final int MAX_THUMB_W = 132;
+    private static final int META_H      = 14;
+    private static final int THUMB_GAP   = 6;
+    private static final int GRID_PAD_X  = 14;
     private static final int TOP_PAD    = 30;
-    private static final int BOTTOM_PAD = 36;
+    private static final int BOTTOM_PAD = 8;
+    private static final int SORT_W     = 126;
+    private static final int SORT_H     = 18;
+    private static final int CONTROLS_Y = 4;
 
     private final List<File>                     files         = new ArrayList<>();
     private final List<ResourceLocation>               thumbIds      = new ArrayList<>();
@@ -56,19 +64,31 @@ public class ScreenshotGalleryScreen extends Screen {
     private static final ResourceLocation ICON_DELETE  = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/delete.png");
     private static final ResourceLocation ICON_DELETE_H= ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/delete_hover.png");
 
-    private float marqueeOffset    = 0f;
-    private long  marqueeLastMs    = -1;
-    private int   marqueeIdx       = -1;
-    private int   marqueePauseTimer = 60;
-    private static final float MARQUEE_SPEED = 30f;
-    private static final int   MARQUEE_PAUSE = 60;
-
     private boolean pendingExternalRefresh = false;
-    private int loadSessionId = 0;
     private final Map<String, ThumbUploadOverlay> thumbUploadStates = new HashMap<>();
     private static final long DOUBLE_CLICK_MS = 300L;
     private int lastClickedThumbIdx = -1;
     private long lastThumbClickMs = -1L;
+    private int thumbnailTextureScale = 1;
+    private SortMode sortMode = SortMode.NEWEST_FIRST;
+    private Button backButton;
+    private Button sortButton;
+
+    private enum SortMode {
+        NEWEST_FIRST("better_screenshots.gallery.sort.newest"),
+        OLDEST_FIRST("better_screenshots.gallery.sort.oldest");
+
+        private final String translationKey;
+
+        SortMode(String translationKey) {
+            this.translationKey = translationKey;
+        }
+
+        private SortMode next() {
+            SortMode[] values = values();
+            return values[(ordinal() + 1) % values.length];
+        }
+    }
 
     private enum ThumbUploadState {
         UPLOADING, SUCCESS, ERROR
@@ -89,11 +109,7 @@ public class ScreenshotGalleryScreen extends Screen {
 
     @Override
     protected void init() {
-        addRenderableWidget(Button.builder(
-                        Component.translatable("better_screenshots.gallery.back"),
-                        btn -> minecraft.setScreen(parent))
-                .bounds(8, 4, 60, 14)
-                .build());
+        rebuildControls();
 
         if (pendingExternalRefresh) {
             pendingExternalRefresh = false;
@@ -108,10 +124,7 @@ public class ScreenshotGalleryScreen extends Screen {
             new java.util.concurrent.Semaphore(MAX_CONCURRENT_LOADS);
 
     private void loadScreenshots() {
-        loadSessionId++;
-        final int currentSession = loadSessionId;
-
-        for (DynamicTexture t : thumbTextures) ScreenshotPreviewRenderer.deferClose(t);
+        for (DynamicTexture t : thumbTextures) if (t != null) t.close();
         thumbTextures.clear();
         thumbIds.clear();
         files.clear();
@@ -127,8 +140,9 @@ public class ScreenshotGalleryScreen extends Screen {
                 f -> f.isFile() && f.getName().toLowerCase().endsWith(".png"));
         if (found == null) return;
 
-        Arrays.sort(found, Comparator.comparingLong(File::lastModified).reversed());
+        thumbnailTextureScale = calculateThumbnailTextureScale(mc);
         Collections.addAll(files, found);
+        sortFiles();
 
         for (int i = 0; i < files.size(); i++) {
             thumbIds.add(ResourceLocation.fromNamespaceAndPath("better_screenshots",
@@ -139,13 +153,13 @@ public class ScreenshotGalleryScreen extends Screen {
         int priority = Math.min(files.size(), 8);
         for (int i = 0; i < priority; i++) {
             final int idx = i;
-            Thread.ofVirtual().start(() -> loadThumbLimited(mc, idx, currentSession));
+            Thread.ofVirtual().start(() -> loadThumbLimited(mc, idx));
         }
         for (int i = priority; i < files.size(); i++) {
             final int idx = i;
             Thread.ofVirtual().start(() -> {
                 try { Thread.sleep(idx * 5L); } catch (Exception ignored) {}
-                loadThumbLimited(mc, idx, currentSession);
+                loadThumbLimited(mc, idx);
             });
         }
 
@@ -153,37 +167,42 @@ public class ScreenshotGalleryScreen extends Screen {
         refreshActionButtons();
     }
 
+    private void sortFiles() {
+        Comparator<File> comparator = switch (sortMode) {
+            case NEWEST_FIRST -> Comparator.comparingLong(File::lastModified).reversed();
+            case OLDEST_FIRST -> Comparator.comparingLong(File::lastModified);
+        };
+        files.sort(comparator);
+    }
+
     public void refreshAfterExternalChange() {
         pendingExternalRefresh = true;
     }
 
-    private void loadThumbLimited(Minecraft mc, int idx, int session) {
+    private void loadThumbLimited(Minecraft mc, int idx) {
         try {
             loadSemaphore.acquire();
-            if (session == loadSessionId) {
-                loadThumb(mc, idx, session);
-            }
+            loadThumb(mc, idx);
         } catch (InterruptedException ignored) {
         } finally {
             loadSemaphore.release();
         }
     }
     private void recalcContentH() {
-        int rows = (int) Math.ceil((double) files.size() / COLS);
-        totalContentH = rows * (THUMB_H + THUMB_GAP);
+        int rows = (int) Math.ceil((double) files.size() / cols());
+        totalContentH = rows * (tileH() + THUMB_GAP);
+        clampScroll();
     }
 
-    private void loadThumb(Minecraft mc, int idx, int session) {
+    private void loadThumb(Minecraft mc, int idx) {
         try (InputStream is = Files.newInputStream(files.get(idx).toPath())) {
             NativeImage img   = NativeImage.read(is);
             NativeImage thumb = scaleTo(img);
             img.close();
             mc.execute(() -> {
-                if (session != loadSessionId || idx >= thumbTextures.size()) {
-                    thumb.close();
-                    return;
-                }
-                DynamicTexture tex = new DynamicTexture(thumb);
+                if (idx >= thumbTextures.size()) return;
+                DynamicTexture tex =
+                        new DynamicTexture(thumb);
                 mc.getTextureManager().register(thumbIds.get(idx), tex);
                 thumbTextures.set(idx, tex);
             });
@@ -191,48 +210,159 @@ public class ScreenshotGalleryScreen extends Screen {
     }
 
     private NativeImage scaleTo(NativeImage src) {
-        float scale = Math.min((float) ScreenshotGalleryScreen.THUMB_W / src.getWidth(),
-                (float) ScreenshotGalleryScreen.THUMB_H / src.getHeight());
-        int sw = Math.max(1, (int)(src.getWidth()  * scale));
-        int sh = Math.max(1, (int)(src.getHeight() * scale));
-        int ox = (ScreenshotGalleryScreen.THUMB_W - sw) / 2;
-        int oy = (ScreenshotGalleryScreen.THUMB_H - sh) / 2;
+        int targetW = thumbnailTextureWidth();
+        int targetH = thumbnailTextureHeight();
+        float scale = Math.min((float) targetW / src.getWidth(),
+                (float) targetH / src.getHeight());
+        int sw = Math.max(1, Math.round(src.getWidth()  * scale));
+        int sh = Math.max(1, Math.round(src.getHeight() * scale));
 
         float scaleX = (float) src.getWidth()  / sw;
         float scaleY = (float) src.getHeight() / sh;
+        boolean pixelated = ScreenshotConfig.get().pixelatedPreviews;
 
-        NativeImage dst = new NativeImage(ScreenshotGalleryScreen.THUMB_W, ScreenshotGalleryScreen.THUMB_H, false);
-
-        for (int y = 0; y < ScreenshotGalleryScreen.THUMB_H; y++)
-            for (int x = 0; x < ScreenshotGalleryScreen.THUMB_W; x++)
-                dst.setPixel(x, y, 0xFF000000);
+        NativeImage dst = new NativeImage(sw, sh, false);
 
         for (int y = 0; y < sh; y++) {
-            int sy = Math.min((int)(y * scaleY), src.getHeight() - 1);
+            float sourceY = (y + 0.5f) * scaleY - 0.5f;
+            int sy = Math.min((int)(((y + 0.5f) * scaleY)), src.getHeight() - 1);
             for (int x = 0; x < sw; x++) {
-                int sx   = Math.min((int)(x * scaleX), src.getWidth() - 1);
-                int pixel = src.getPixel(sx, sy);
-                dst.setPixel(ox + x, oy + y, pixel);
+                float sourceX = (x + 0.5f) * scaleX - 0.5f;
+                int sx   = Math.min((int)(((x + 0.5f) * scaleX)), src.getWidth() - 1);
+                int argb = pixelated
+                        ? src.getPixel(sx, sy)
+                        : sampleSmoothArgb(src, sourceX, sourceY, scaleX, scaleY);
+                dst.setPixel(x, y, argb);
             }
         }
         return dst;
     }
 
+    private static int sampleBilinearArgb(NativeImage src, float sourceX, float sourceY) {
+        float x = Math.max(0f, Math.min(src.getWidth() - 1f, sourceX));
+        float y = Math.max(0f, Math.min(src.getHeight() - 1f, sourceY));
+        int x0 = (int) Math.floor(x);
+        int y0 = (int) Math.floor(y);
+        int x1 = Math.min(x0 + 1, src.getWidth() - 1);
+        int y1 = Math.min(y0 + 1, src.getHeight() - 1);
+        float tx = x - x0;
+        float ty = y - y0;
+
+        int c00 = src.getPixel(x0, y0);
+        int c10 = src.getPixel(x1, y0);
+        int c01 = src.getPixel(x0, y1);
+        int c11 = src.getPixel(x1, y1);
+
+        int a = bilinearChannel(c00, c10, c01, c11, 24, tx, ty);
+        int r = bilinearChannel(c00, c10, c01, c11, 16, tx, ty);
+        int g = bilinearChannel(c00, c10, c01, c11, 8, tx, ty);
+        int b = bilinearChannel(c00, c10, c01, c11, 0, tx, ty);
+        return (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
+    private static int sampleSmoothArgb(NativeImage src, float centerX, float centerY, float scaleX, float scaleY) {
+        if (scaleX <= 1.5f && scaleY <= 1.5f) {
+            return sampleBilinearArgb(src, centerX, centerY);
+        }
+
+        int samplesX = Math.min(5, Math.max(2, (int) Math.ceil(scaleX / 8f)));
+        int samplesY = Math.min(5, Math.max(2, (int) Math.ceil(scaleY / 8f)));
+        float startX = centerX - scaleX / 2f;
+        float startY = centerY - scaleY / 2f;
+        int total = samplesX * samplesY;
+        int aSum = 0;
+        int rSum = 0;
+        int gSum = 0;
+        int bSum = 0;
+
+        for (int yy = 0; yy < samplesY; yy++) {
+            float sy = startY + (yy + 0.5f) * scaleY / samplesY;
+            for (int xx = 0; xx < samplesX; xx++) {
+                float sx = startX + (xx + 0.5f) * scaleX / samplesX;
+                int argb = sampleBilinearArgb(src, sx, sy);
+                aSum += (argb >> 24) & 0xFF;
+                rSum += (argb >> 16) & 0xFF;
+                gSum += (argb >> 8) & 0xFF;
+                bSum += argb & 0xFF;
+            }
+        }
+
+        int a = Math.round((float) aSum / total);
+        int r = Math.round((float) rSum / total);
+        int g = Math.round((float) gSum / total);
+        int b = Math.round((float) bSum / total);
+        return (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
+    private static int bilinearChannel(int c00, int c10, int c01, int c11, int shift, float tx, float ty) {
+        float v00 = (c00 >> shift) & 0xFF;
+        float v10 = (c10 >> shift) & 0xFF;
+        float v01 = (c01 >> shift) & 0xFF;
+        float v11 = (c11 >> shift) & 0xFF;
+        float top = v00 + (v10 - v00) * tx;
+        float bottom = v01 + (v11 - v01) * tx;
+        return Math.max(0, Math.min(255, Math.round(top + (bottom - top) * ty)));
+    }
+
     // Layout
 
-    private int gridW()      { return COLS * THUMB_W + (COLS - 1) * THUMB_GAP; }
+    private int cols() {
+        int available = Math.max(MIN_THUMB_W, this.width - GRID_PAD_X * 2 - SCROLLBAR_HIT_W);
+        int count = Math.max(1, (available + THUMB_GAP) / (MIN_THUMB_W + THUMB_GAP));
+        return Math.max(1, Math.min(6, count));
+    }
+
+    private int thumbW() {
+        int cols = cols();
+        int available = Math.max(MIN_THUMB_W, this.width - GRID_PAD_X * 2 - SCROLLBAR_HIT_W);
+        int width = (available - (cols - 1) * THUMB_GAP) / cols;
+        return Math.max(MIN_THUMB_W, Math.min(MAX_THUMB_W, width));
+    }
+
+    private int thumbH() { return Math.max(1, thumbW() * 9 / 16); }
+    private int tileH()  { return thumbH() + META_H; }
+    private int gridW()      { return cols() * thumbW() + (cols() - 1) * THUMB_GAP; }
     private int gridStartX() { return (this.width - gridW()) / 2; }
     private int gridBottomY(){ return this.height - BOTTOM_PAD; }
     private int screenshotsTopPad() {
         return TOP_PAD + ScreenshotConfig.get().screenshotsFirstRowTopMargin;
     }
 
-    // Click handling
-
-    private void playActionButtonClickSound() {
-        if (minecraft == null || minecraft.getSoundManager() == null) return;
-        minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 2.0f));
+    private int thumbnailTextureWidth() {
+        return MAX_THUMB_W * thumbnailTextureScale();
     }
+
+    private int thumbnailTextureHeight() {
+        return Math.max(1, (MAX_THUMB_W * 9 / 16) * thumbnailTextureScale());
+    }
+
+    private int thumbnailTextureScale() {
+        return thumbnailTextureScale;
+    }
+
+    private int calculateThumbnailTextureScale(Minecraft mc) {
+        if (ScreenshotConfig.get().pixelatedPreviews) {
+            return 1;
+        }
+        if (mc == null || mc.getWindow() == null) {
+            return 1;
+        }
+        return Math.max(1, Math.min(4, (int) Math.ceil(mc.getWindow().getGuiScale())));
+    }
+
+    private void clampScroll() {
+        int visibleH = gridBottomY() - screenshotsTopPad();
+        int maxScroll = Math.max(0, totalContentH - visibleH);
+        scrollOffset = Math.max(0, Math.min(scrollOffset, maxScroll));
+    }
+
+    @Override
+    public void resize(Minecraft minecraft, int width, int height) {
+        super.resize(minecraft, width, height);
+        recalcContentH();
+    }
+
+    // Click handling
 
     public boolean handleClick(int button, double mouseX, double mouseY) {
         if (button != 0) return false;
@@ -270,8 +400,8 @@ public class ScreenshotGalleryScreen extends Screen {
             for (int i = 0; i < visibleButtons; i++) {
                 if (mouseX >= actionBtnX[i] && mouseX <= actionBtnX[i] + ACT_BTN_W
                         && mouseY >= actionBtnY[i] && mouseY <= actionBtnY[i] + ACT_BTN_H) {
+                    playActionButtonClickSound();
                     if (showUploadAction) {
-                        playActionButtonClickSound();
                         switch (i) {
                             case 0 -> openFullscreen(selectedIdx);
                             case 1 -> copyFile(selectedIdx);
@@ -279,7 +409,6 @@ public class ScreenshotGalleryScreen extends Screen {
                             case 3 -> deleteFile(selectedIdx);
                         }
                     } else {
-                        playActionButtonClickSound();
                         switch (i) {
                             case 0 -> openFullscreen(selectedIdx);
                             case 1 -> copyFile(selectedIdx);
@@ -292,22 +421,24 @@ public class ScreenshotGalleryScreen extends Screen {
         }
 
         int sx = gridStartX();
+        int cols = cols();
+        int thumbW = thumbW();
+        int tileH = tileH();
 
         for (int i = 0; i < files.size(); i++) {
-            int col = i % COLS;
-            int row = i / COLS;
-            int x   = sx + col * (THUMB_W + THUMB_GAP);
-            int y = topPad + row * (THUMB_H + THUMB_GAP) - scrollOffset;
+            int col = i % cols;
+            int row = i / cols;
+            int x   = sx + col * (thumbW + THUMB_GAP);
+            int y = topPad + row * (tileH + THUMB_GAP) - scrollOffset;
 
-            if (mouseX >= x && mouseX <= x + THUMB_W
-                    && mouseY >= y && mouseY <= y + THUMB_H
+            if (mouseX >= x && mouseX <= x + thumbW
+                    && mouseY >= y && mouseY <= y + tileH
                     && mouseY >= topPad && mouseY <= bottomY) {
                 long now = System.currentTimeMillis();
                 if (lastClickedThumbIdx == i
                         && lastThumbClickMs > 0
                         && now - lastThumbClickMs <= DOUBLE_CLICK_MS) {
                     selectedIdx = i;
-                    marqueeIdx = -1;
                     refreshActionButtons();
                     lastClickedThumbIdx = -1;
                     lastThumbClickMs = -1L;
@@ -318,12 +449,16 @@ public class ScreenshotGalleryScreen extends Screen {
                 lastClickedThumbIdx = i;
                 lastThumbClickMs = now;
                 selectedIdx = (selectedIdx == i) ? -1 : i;
-                marqueeIdx  = -1;
                 refreshActionButtons();
                 return true;
             }
         }
         return false;
+    }
+
+    private void playActionButtonClickSound() {
+        if (minecraft == null || minecraft.getSoundManager() == null) return;
+        minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 2.0f));
     }
 
     @Override
@@ -337,7 +472,7 @@ public class ScreenshotGalleryScreen extends Screen {
         int topPad = screenshotsTopPad();
         if (button == 0 && draggingScrollbar) {
             int bottomY  = gridBottomY();
-            int visibleH = bottomY - topPad;
+            int visibleH = bottomY - screenshotsTopPad();
             int tmbH     = Math.max(16, visibleH * visibleH / totalContentH);
             int maxSc    = Math.max(0, totalContentH - visibleH);
             updateScrollFromThumb(mouseY - scrollbarDragOffsetY, tmbH, visibleH, maxSc);
@@ -376,93 +511,76 @@ public class ScreenshotGalleryScreen extends Screen {
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
         int topPad = screenshotsTopPad();
         this.renderBackground(context, mouseX, mouseY, delta);
-        super.render(context, mouseX, mouseY, delta);
 
-        context.drawCenteredString(font,
-                title, this.width / 2, 6, 0xFFFFFF);
+        super.render(context, mouseX, mouseY, delta);
+        drawTopBar(context);
+        renderTopControls(context, mouseX, mouseY, delta);
+        drawTopBarSeparator(context);
 
         int sx      = gridStartX();
         int bottomY = gridBottomY();
+        int cols    = cols();
+        int thumbW  = thumbW();
+        int thumbH  = thumbH();
+        int tileH   = tileH();
 
         // Scissor net
         context.enableScissor(0, topPad - 2, this.width, bottomY);
 
         for (int i = 0; i < files.size(); i++) {
-            int col = i % COLS;
-            int row = i / COLS;
-            int x   = sx + col * (THUMB_W + THUMB_GAP);
-            int y   = topPad + row * (THUMB_H + THUMB_GAP) - scrollOffset;
+            int col = i % cols;
+            int row = i / cols;
+            int x   = sx + col * (thumbW + THUMB_GAP);
+            int y   = topPad + row * (tileH + THUMB_GAP) - scrollOffset;
 
-            if (y + THUMB_H < topPad || y > bottomY) continue;
+            if (y + tileH < topPad || y > bottomY) continue;
 
-            boolean hov = mouseX >= x && mouseX <= x + THUMB_W
-                    && mouseY >= y && mouseY <= y + THUMB_H
+            boolean hov = mouseX >= x && mouseX <= x + thumbW
+                    && mouseY >= y && mouseY <= y + tileH
                     && mouseY >= topPad && mouseY <= bottomY;
             boolean sel = (i == selectedIdx);
 
             int border = sel ? 0xFFFFFFFF : hov ? 0xFFAAAAAA : 0xFF555555;
-            context.fill(x - 1, y - 1, x + THUMB_W + 1, y + THUMB_H + 1, border);
+            context.fill(x - 1, y - 1, x + thumbW + 1, y + tileH + 1, border);
 
             if (i < thumbTextures.size() && thumbTextures.get(i) != null) {
-                context.blit(RenderType::guiTextured, 
-                        thumbIds.get(i),
-                        x, y, 0f, 0f, THUMB_W, THUMB_H, THUMB_W, THUMB_H);
+                DynamicTexture texture = thumbTextures.get(i);
+                NativeImage pixels = texture.getPixels();
+                int texW = pixels != null ? pixels.getWidth() : thumbnailTextureWidth();
+                int texH = pixels != null ? pixels.getHeight() : thumbnailTextureHeight();
+                float imageScale = Math.min((float) thumbW / texW, (float) thumbH / texH);
+                int imageW = Math.max(1, Math.round(texW * imageScale));
+                int imageH = Math.max(1, Math.round(texH * imageScale));
+                int imageX = x + (thumbW - imageW) / 2;
+                int imageY = y + (thumbH - imageH) / 2;
+                context.fill(x, y, x + thumbW, y + thumbH, 0xFF000000);
+                context.blit(
+                        RenderType::guiTextured, thumbIds.get(i),
+                        imageX, imageY, 0f, 0f, imageW, imageH, texW, texH, texW, texH);
             } else {
-                context.fill(x, y, x + THUMB_W, y + THUMB_H, 0xFF2a2a2a);
+                context.fill(x, y, x + thumbW, y + thumbH, 0xFF2a2a2a);
                 context.drawCenteredString(font,
                         Component.translatable("better_screenshots.gallery.loading"),
-                        x + THUMB_W / 2, y + THUMB_H / 2 - 4, 0xFF555555);
+                        x + thumbW / 2, y + thumbH / 2 - 4, 0xFF555555);
             }
 
             // Copy animation
             if (sel) {
                 int ca = ScreenshotPreviewRenderer.getCopyFlashAlpha();
-                if (ca > 0) context.fill(x, y, x + THUMB_W, y + THUMB_H, (ca << 24) | 0x004499FF);
+                if (ca > 0) context.fill(x, y, x + thumbW, y + thumbH, (ca << 24) | 0x004499FF);
             }
 
             if (i < files.size()) {
-                renderUploadOverlay(context, x, y, THUMB_W, THUMB_H, files.get(i));
+                renderUploadOverlay(context, x, y, thumbW, thumbH, files.get(i));
             }
 
-            // Name display on hover
-            if (hov && y >= topPad && y + THUMB_H <= bottomY) {
-                context.disableScissor();
-                context.enableScissor(x, y, x + THUMB_W, y + THUMB_H);
-
-                String name = files.get(i).getName().replace(".png", "");
-                int nameW   = font.width(name);
-                int labelH  = 12;
-                int labelY  = y + THUMB_H - labelH;
-
-                context.fill(x, labelY, x + THUMB_W, y + THUMB_H, 0xCC000000);
-
-                if (nameW <= THUMB_W - 4) {
-                    context.drawCenteredString(font,
-                            Component.literal(name), x + THUMB_W / 2, labelY + 2, 0xFFFFFFFF);
-                } else {
-                    String clipped = name;
-                    while (font.width(clipped + "…") > THUMB_W - 4
-                            && !clipped.isEmpty()) {
-                        clipped = clipped.substring(0, clipped.length() - 1);
-                    }
-                    context.drawCenteredString(font,
-                            Component.literal(clipped + "…"), x + THUMB_W / 2, labelY + 2, 0xFFFFFFFF);
-                }
-
-                context.disableScissor();
-                context.enableScissor(0, topPad - 2, this.width, bottomY);
-            }
+            drawTimestampBar(context, files.get(i), x, y + thumbH, thumbW);
         }
 
         context.disableScissor();
 
-        // Info panel
         if (selectedIdx >= 0 && selectedIdx < files.size()) {
             drawSelectedPanel(context);
-        } else {
-            context.drawCenteredString(font,
-                    Component.translatable("better_screenshots.gallery.tip"),
-                    this.width / 2, this.height - BOTTOM_PAD + 12, 0xFF555555);
         }
 
         // Scrollbar
@@ -476,20 +594,23 @@ public class ScreenshotGalleryScreen extends Screen {
             context.fill(tx, topPad, tx + 3, topPad + visibleH, 0x33FFFFFF);
             context.fill(tx, tmbY,    tx + 3, tmbY + tmbH,      0xBBFFFFFF);
         }
-
     }
 
     private void drawSelectedPanel(GuiGraphics context) {
         if (selectedIdx < 0 || selectedIdx >= files.size()) return;
         int topPad = screenshotsTopPad();
 
-        int col    = selectedIdx % COLS;
-        int row    = selectedIdx / COLS;
+        int cols   = cols();
+        int thumbW = thumbW();
+        int thumbH = thumbH();
+        int tileH  = tileH();
+        int col    = selectedIdx % cols;
+        int row    = selectedIdx / cols;
         int sx     = gridStartX();
-        int thumbX = sx + col * (THUMB_W + THUMB_GAP);
-        int thumbY = topPad + row * (THUMB_H + THUMB_GAP) - scrollOffset;
+        int thumbX = sx + col * (thumbW + THUMB_GAP);
+        int thumbY = topPad + row * (tileH + THUMB_GAP) - scrollOffset;
 
-        boolean thumbVisible = thumbY + THUMB_H > topPad && thumbY < gridBottomY();
+        boolean thumbVisible = thumbY + thumbH > topPad && thumbY < gridBottomY();
 
         if (thumbVisible) {
             // Keep the action buttons clipped to the thumbnails container
@@ -500,7 +621,7 @@ public class ScreenshotGalleryScreen extends Screen {
             boolean showUploadAction = ScreenshotUploader.isUploaderEnabled();
             int visibleButtons = showUploadAction ? 4 : 3;
             int totalBtnsW = visibleButtons * ACT_BTN_W + Math.max(0, visibleButtons - 1) * ACT_BTN_GAP;
-            int btnsStartX = thumbX + THUMB_W - totalBtnsW - 2;
+            int btnsStartX = thumbX + thumbW - totalBtnsW - 2;
             int btnsY      = thumbY + 2;
 
             Minecraft mc = Minecraft.getInstance();
@@ -523,8 +644,9 @@ public class ScreenshotGalleryScreen extends Screen {
                         && mouseY >= actionBtnY[i]
                         && mouseY <= actionBtnY[i] + ACT_BTN_H;
 
-                context.blit(RenderType::guiTextured, 
-                                                hov ? iconsH[i] : icons[i],
+                context.blit(
+                        RenderType::guiTextured,
+                        hov ? iconsH[i] : icons[i],
                         actionBtnX[i], actionBtnY[i],
                         0f, 0f, ACT_BTN_W, ACT_BTN_H, ACT_BTN_W, ACT_BTN_H);
             }
@@ -540,65 +662,20 @@ public class ScreenshotGalleryScreen extends Screen {
                 actionBtnY[i] = -100;
             }
         }
+    }
 
-        // File name info
-        String fullName  = files.get(selectedIdx).getName().replace(".png", "");
-        int    panelY    = this.height - BOTTOM_PAD;
-        int    textAreaW = 220;
-        int    textX     = this.width / 2 - textAreaW / 2;
-        int    textY     = panelY + 5;
-        int    fullW     = font.width(fullName);
+    private void drawTopBar(GuiGraphics context) {
+        context.fill(0, 0, this.width, TOP_PAD - 4, 0xFF181818);
+    }
 
-        context.fill(0, panelY, this.width, panelY + BOTTOM_PAD, 0xCC000000);
-        context.fill(0, panelY, this.width, panelY + 1,          0xFF444444);
+    private void drawTopBarSeparator(GuiGraphics context) {
+        context.fill(0, TOP_PAD - 4, this.width, TOP_PAD - 3, 0xFF2F2F2F);
+        context.fill(0, TOP_PAD - 3, this.width, TOP_PAD - 2, 0x66000000);
+    }
 
-        if (fullW <= textAreaW) {
-            marqueeOffset     = 0;
-            marqueePauseTimer = MARQUEE_PAUSE;
-            context.drawCenteredString(font,
-                    Component.literal(fullName), this.width / 2, textY, 0xFFCCCCCC);
-        } else {
-            if (!ScreenshotConfig.get().uiAnimationsEnabled()) {
-                String clipped = fullName;
-                while (font.width(clipped + "…") > textAreaW && !clipped.isEmpty()) {
-                    clipped = clipped.substring(0, clipped.length() - 1);
-                }
-                marqueeOffset     = 0;
-                marqueePauseTimer = MARQUEE_PAUSE;
-                context.drawCenteredString(font,
-                        Component.literal(clipped + "…"), this.width / 2, textY, 0xFFCCCCCC);
-                return;
-            }
-
-            if (marqueeIdx != selectedIdx) {
-                marqueeIdx        = selectedIdx;
-                marqueeOffset     = 0f;
-                marqueePauseTimer = MARQUEE_PAUSE;
-                marqueeLastMs     = System.currentTimeMillis();
-            }
-
-            long  now  = System.currentTimeMillis();
-            float dtMs = marqueeLastMs < 0 ? 0 : (now - marqueeLastMs);
-            marqueeLastMs = now;
-
-            if (marqueePauseTimer > 0) {
-                marqueePauseTimer--;
-            } else {
-                marqueeOffset += MARQUEE_SPEED * (dtMs / 1000f);
-                if (marqueeOffset > fullW - textAreaW + 10) {
-                    marqueeOffset     = 0f;
-                    marqueePauseTimer = MARQUEE_PAUSE;
-                }
-            }
-
-            context.enableScissor(textX, textY - 1, textX + textAreaW, textY + 10);
-            context.drawString(font, Component.literal(fullName),
-                    textX - (int) marqueeOffset, textY, 0xFFCCCCCC);
-            context.disableScissor();
-
-            context.fill(textX,                  textY - 1, textX + 12,        textY + 10, 0xDD000000);
-            context.fill(textX + textAreaW - 12, textY - 1, textX + textAreaW, textY + 10, 0xDD000000);
-        }
+    private void renderTopControls(GuiGraphics context, int mouseX, int mouseY, float delta) {
+        if (backButton != null) backButton.render(context, mouseX, mouseY, delta);
+        if (sortButton != null) sortButton.render(context, mouseX, mouseY, delta);
     }
 
 
@@ -607,7 +684,6 @@ public class ScreenshotGalleryScreen extends Screen {
         ScreenshotFullscreenScreen screen = new ScreenshotFullscreenScreen(this);
         // Provide the full file list so the fullscreen screen can navigate prev/next
         screen.setNavigationContext(files, idx);
-        ScreenshotPreviewRenderer.captureBackground(() -> mc.setScreen(screen));
 
         Thread.ofVirtual().start(() -> {
             try {
@@ -619,15 +695,31 @@ public class ScreenshotGalleryScreen extends Screen {
                 });
             } catch (Exception e) { e.printStackTrace(); }
         });
+
+        ScreenshotPreviewRenderer.captureBackground(() -> mc.setScreen(screen));
     }
 
     private void refreshActionButtons() {
+        rebuildControls();
+    }
+
+    private void rebuildControls() {
         clearWidgets();
-        addRenderableWidget(Button.builder(
+        backButton = Button.builder(
                         Component.translatable("better_screenshots.gallery.back"),
                         btn -> minecraft.setScreen(parent))
-                .bounds(8, 4, 60, 14)
-                .build());
+                .bounds(GRID_PAD_X, CONTROLS_Y, 60, SORT_H)
+                .build();
+        sortButton = Button.builder(
+                        Component.translatable(sortMode.translationKey),
+                        btn -> {
+                            sortMode = sortMode.next();
+                            loadScreenshots();
+                        })
+                .bounds(GRID_PAD_X + 66, CONTROLS_Y, SORT_W, SORT_H)
+                .build();
+        addRenderableWidget(backButton);
+        addRenderableWidget(sortButton);
     }
 
     private void copyFile(int idx) {
@@ -781,5 +873,37 @@ public class ScreenshotGalleryScreen extends Screen {
 
         context.fill(barX, barY, barX + barW, barY + UPLOAD_BAR_H, 0x66000000);
         context.fill(barX, barY, barX + fillW, barY + UPLOAD_BAR_H, color);
+    }
+
+    private void drawTimestampBar(GuiGraphics context, File file, int x, int y, int width) {
+        context.fill(x, y, x + width, y + META_H, 0xFF3A3A3A);
+        context.fill(x, y, x + width, y + 1, 0xFF505050);
+
+        String label = formatScreenshotTime(file.lastModified());
+        if (font.width(label) > width - 8) {
+            String clipped = label;
+            while (font.width(clipped + "…") > width - 8 && !clipped.isEmpty()) {
+                clipped = clipped.substring(0, clipped.length() - 1);
+            }
+            label = clipped + "…";
+        }
+
+        context.drawString(font, Component.literal(label), x + 4, y + 4, 0xFFE0E0E0);
+    }
+
+    private static String formatScreenshotTime(long lastModified) {
+        ZoneId zone = ZoneId.systemDefault();
+        Instant instant = Instant.ofEpochMilli(lastModified);
+        LocalDate shotDate = instant.atZone(zone).toLocalDate();
+        LocalDate today = LocalDate.now(zone);
+        String time = DateTimeFormatter.ofPattern("HH:mm").format(instant.atZone(zone));
+
+        if (shotDate.equals(today)) {
+            return Component.translatable("better_screenshots.gallery.time.today", time).getString();
+        }
+        if (shotDate.equals(today.minusDays(1))) {
+            return Component.translatable("better_screenshots.gallery.time.yesterday", time).getString();
+        }
+        return DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").format(instant.atZone(zone));
     }
 }

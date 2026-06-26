@@ -51,6 +51,7 @@ public class ScreenshotConfigData {
     public boolean menuButtonPosition26_2DefaultMigrated = false;
     public int screenshotsFirstRowTopMargin = 0;
     public boolean hideMiniPreviewActionButtons = false;
+    public boolean pixelatedPreviews = false;
 
     public UploadProvider uploadProvider = UploadProvider.DISABLED;
     public boolean uploadAutoUpload = false;

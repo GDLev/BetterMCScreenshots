@@ -1,7 +1,7 @@
 # Better MC Screenshots
-![Supports Minecraft 1.21 – 26.2](https://www.modpackindex.com/badge/mod/103869/better-mc-screenshots/version.svg?style=large&color=red)
-![9,041 downloads across all platforms](https://www.modpackindex.com/badge/mod/103869/better-mc-screenshots/downloads.svg?style=large)
-![Used in 10 modpacks on Modpack Index](https://www.modpackindex.com/badge/mod/103869/better-mc-screenshots/modpacks.svg?style=large)
+![Supports Minecraft 1.21 – 26.2](https://www.modpackindex.com/badge/mod/103869/better-mc-screenshots/version.svg?style=large&color=red#3)
+![downloads across all platforms](https://www.modpackindex.com/badge/mod/103869/better-mc-screenshots/downloads.svg?style=large#5)
+![Used in 10 modpacks on Modpack Index](https://www.modpackindex.com/badge/mod/103869/better-mc-screenshots/modpacks.svg?style=large#3)
 
 Make your screenshot experience actually **better**.
 
@@ -52,28 +52,28 @@ You can optionally upload directly from the game using providers like Imgur, S3,
 <details>
 <summary><b>⚙️ Configuration Menu</b></summary>
 
-![Configuration Menu](https://cdn.modrinth.com/data/oRvsIBeW/images/b4f41c5b8450276a87974bfbf91ddf78b7392b94.png)
+![Configuration Menu](https://cdn.modrinth.com/data/oRvsIBeW/images/ac26160363113895d4512cfead2e55e5f24d2d52.png)
 
 </details>
 
 <details>
 <summary><b>👁️ In-Game Screenshot Viewer</b></summary>
 
-![In-game screenshot viewer](https://cdn.modrinth.com/data/oRvsIBeW/images/1f5e0c9c8d1c3df88722bd7fb1cbf9024f1a2a84.png)
+![In-game screenshot viewer](https://cdn.modrinth.com/data/oRvsIBeW/images/37ddd6e3864e2375cb14bc6af6efe675903d35b0.png)
 
 </details>
 
 <details>
 <summary><b>💬 Mini Preview & Updated Chat Messages</b></summary>
 
-![Mini Preview & Updated Chat Messages](https://cdn.modrinth.com/data/oRvsIBeW/images/3d8b20d0cb49b37f01b200dad5d561b8538f80bb.png)
+![Mini Preview & Updated Chat Messages](https://cdn.modrinth.com/data/oRvsIBeW/images/8413bb4380a39ce603b920f4dfa614b7c4f5dc27.png)
 
 </details>
 
 <details>
 <summary><b>🖼️ Screenshot Gallery</b></summary>
 
-![Screenshot Gallery](https://cdn.modrinth.com/data/oRvsIBeW/images/928c5cc1d023f69af4872f5c5e32ccb1344bfd73.png)
+![Screenshot Gallery](https://cdn.modrinth.com/data/oRvsIBeW/images/fbd0133748eb6c831358e76dc24301b674b0637d.png)
 
 </details>
 

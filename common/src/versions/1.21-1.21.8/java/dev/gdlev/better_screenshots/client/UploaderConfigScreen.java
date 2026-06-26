@@ -109,8 +109,8 @@ public class UploaderConfigScreen extends Screen {
                             case CUSTOM_HTTP -> "better_screenshots.config.uploader.provider.custom";
                             case CATBOX -> "better_screenshots.config.uploader.provider.catbox";
                         }))
-                .withInitialValue(cfg.uploadProvider)
                 .withValues(ScreenshotConfig.UploadProvider.values())
+                .withInitialValue(cfg.uploadProvider)
                 .create(fieldX(), providerY(), fieldW(), BTN_H,
                         Component.translatable("better_screenshots.config.uploader.provider"),
                         (btn, value) -> {
@@ -212,8 +212,8 @@ public class UploaderConfigScreen extends Screen {
                                             case POST -> "better_screenshots.config.uploader.method.post";
                                             case PUT -> "better_screenshots.config.uploader.method.put";
                                         }))
-                                .withInitialValue(cfg.customUploadMethod)
                                 .withValues(ScreenshotConfig.UploadMethod.values())
+                                .withInitialValue(cfg.customUploadMethod)
                                 .create(fieldX(), dynamicRowY(row), fieldW(), BTN_H,
                                         Component.translatable("better_screenshots.config.uploader.custom.method"),
                                         (btn, value) -> {

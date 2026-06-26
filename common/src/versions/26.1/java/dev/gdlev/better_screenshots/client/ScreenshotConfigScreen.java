@@ -33,6 +33,7 @@ public class ScreenshotConfigScreen extends Screen {
     private final List<DynamicTexture> thumbTextures = new ArrayList<>();
     private final List<File>           thumbFiles    = new ArrayList<>();
     private int screenshotCount = 0;
+    private int thumbnailTextureScale = 1;
 
     private int scrollOffset = 0;
     private int maxScroll    = 0;
@@ -89,6 +90,8 @@ public class ScreenshotConfigScreen extends Screen {
 
     private int thumbW()     { return (COL_W - 6) / 2; }
     private int thumbH()     { return (int)(thumbW() * 9f / 16f); }
+    private int thumbnailTextureW() { return thumbW() * thumbnailTextureScale; }
+    private int thumbnailTextureH() { return Math.max(1, thumbH() * thumbnailTextureScale); }
     private int thumbsH()    { return thumbH() * 2 + 4; }
     private int panelH()     { return 240; }
     private int panelY()     { return (this.height - panelH()) / 2; }
@@ -189,6 +192,20 @@ public class ScreenshotConfigScreen extends Screen {
         settingsWidgets.add(addRenderableWidget(new DurationSlider(
                 lx, ty + 14 + GAP * 5, COL_W, BTN_H, initialDuration)));
 
+        settingsWidgets.add(addRenderableWidget(CycleButton.builder(
+                        (Boolean enabled) -> Component.translatable(enabled
+                                ? "better_screenshots.config.pixelated_previews.on"
+                                : "better_screenshots.config.pixelated_previews.off"),
+                        ScreenshotConfig.get().pixelatedPreviews)
+                .withValues(Boolean.FALSE, Boolean.TRUE)
+                .create(lx, ty + 14 + GAP * 6, COL_W, BTN_H,
+                        Component.translatable("better_screenshots.config.pixelated_previews"),
+                        (btn, val) -> {
+                            ScreenshotConfig.get().pixelatedPreviews = val;
+                            ScreenshotConfig.save();
+                            loadThumbnails();
+                        })));
+
         // Menu Button Position
         settingsWidgets.add(addRenderableWidget(CycleButton.builder(
                         (ScreenshotConfig.MenuButtonPosition p) -> Component.translatable(switch (p) {
@@ -201,14 +218,14 @@ public class ScreenshotConfigScreen extends Screen {
                         }),
                         ScreenshotConfig.get().menuButtonPosition)
                 .withValues(menuButtonPositionValues())
-                .create(lx, ty + 14 + GAP * 6, COL_W, BTN_H,
+                .create(lx, ty + 14 + GAP * 7, COL_W, BTN_H,
                         Component.translatable("better_screenshots.config.menu_button"),
                         (btn, val) -> { ScreenshotConfig.get().menuButtonPosition = val; ScreenshotConfig.save(); })));
 
         settingsWidgets.add(addRenderableWidget(Button.builder(
                         Component.translatable("better_screenshots.config.uploader.configure"),
                         btn -> minecraft.setScreen(new UploaderConfigScreen(this)))
-                .bounds(lx, ty + 14 + GAP * 7, COL_W, BTN_H)
+                .bounds(lx, ty + 14 + GAP * 8, COL_W, BTN_H)
                 .build()));
 
         // Back
@@ -292,8 +309,12 @@ public class ScreenshotConfigScreen extends Screen {
             context.fill(tx - 1, tty - 1, tx + tw + 1, tty + th + 1, border);
 
             if (i < thumbTextures.size() && thumbTextures.get(i) != null) {
+                DynamicTexture texture = thumbTextures.get(i);
+                NativeImage pixels = texture.getPixels();
+                int texW = pixels != null ? pixels.getWidth() : thumbnailTextureW();
+                int texH = pixels != null ? pixels.getHeight() : thumbnailTextureH();
                 context.blit(RenderPipelines.GUI_TEXTURED, thumbIds.get(i),
-                        tx, tty, 0f, 0f, tw, th, tw, th);
+                        tx, tty, 0f, 0f, tw, th, texW, texH, texW, texH);
             } else if (i < thumbIds.size()) {
                 context.fill(tx, tty, tx + tw, tty + th, 0xFF1a1a1a);
                 context.centeredText(font,
@@ -650,6 +671,8 @@ public class ScreenshotConfigScreen extends Screen {
         screenshotCount = files.length;
 
         int count = Math.min(files.length, 4);
+        Minecraft mc = Minecraft.getInstance();
+        thumbnailTextureScale = calculateThumbnailTextureScale(mc);
         for (int i = 0; i < count; i++) {
             thumbIds.add(Identifier.fromNamespaceAndPath("better_screenshots",
                     "cfg_thumb_" + i + "_" + files[i].lastModified()));
@@ -657,14 +680,13 @@ public class ScreenshotConfigScreen extends Screen {
             thumbFiles.add(files[i]);
         }
 
-        Minecraft mc = Minecraft.getInstance();
         for (int i = 0; i < count; i++) {
             final int  idx  = i;
             final File file = files[i];
             Thread.ofVirtual().start(() -> {
                 try (InputStream is = Files.newInputStream(file.toPath())) {
                     NativeImage img   = NativeImage.read(is);
-                    NativeImage thumb = scaleTo(img, thumbW(), thumbH());
+                    NativeImage thumb = scaleTo(img, thumbnailTextureW(), thumbnailTextureH());
                     img.close();
                     mc.execute(() -> {
                         if (idx >= thumbTextures.size()) return;
@@ -685,20 +707,27 @@ public class ScreenshotConfigScreen extends Screen {
     private NativeImage scaleTo(NativeImage src, int tw, int th) {
         float scale = Math.min((float) tw / src.getWidth(),
                 (float) th / src.getHeight());
-        int sw = (int)(src.getWidth()  * scale);
-        int sh = (int)(src.getHeight() * scale);
+        int sw = Math.max(1, Math.round(src.getWidth()  * scale));
+        int sh = Math.max(1, Math.round(src.getHeight() * scale));
         int ox = (tw - sw) / 2;
         int oy = (th - sh) / 2;
+        float scaleX = (float) src.getWidth() / sw;
+        float scaleY = (float) src.getHeight() / sh;
+        boolean pixelated = ScreenshotConfig.get().pixelatedPreviews;
 
         NativeImage dst = new NativeImage(tw, th, false);
         for (int y = 0; y < th; y++)
             for (int x = 0; x < tw; x++)
                 dst.setPixelABGR(x, y, 0xFF000000);
         for (int y = 0; y < sh; y++) {
+            float sourceY = (y + 0.5f) * scaleY - 0.5f;
+            int sy = Math.min((int)(((y + 0.5f) * scaleY)), src.getHeight() - 1);
             for (int x = 0; x < sw; x++) {
-                int sx   = Math.min((int)((float) x / sw * src.getWidth()),  src.getWidth()  - 1);
-                int sy   = Math.min((int)((float) y / sh * src.getHeight()), src.getHeight() - 1);
-                int argb = src.getPixel(sx, sy);
+                float sourceX = (x + 0.5f) * scaleX - 0.5f;
+                int sx   = Math.min((int)(((x + 0.5f) * scaleX)), src.getWidth() - 1);
+                int argb = pixelated
+                        ? src.getPixel(sx, sy)
+                        : sampleSmoothArgb(src, sourceX, sourceY, scaleX, scaleY);
                 int a    = (argb >> 24) & 0xFF;
                 int r    = (argb >> 16) & 0xFF;
                 int g    = (argb >>  8) & 0xFF;
@@ -707,6 +736,82 @@ public class ScreenshotConfigScreen extends Screen {
             }
         }
         return dst;
+    }
+
+    private int calculateThumbnailTextureScale(Minecraft mc) {
+        if (ScreenshotConfig.get().pixelatedPreviews) {
+            return 1;
+        }
+        if (mc == null || mc.getWindow() == null) {
+            return 1;
+        }
+        return Math.max(1, Math.min(4, (int) Math.ceil(mc.getWindow().getGuiScale())));
+    }
+
+    private static int sampleBilinearArgb(NativeImage src, float sourceX, float sourceY) {
+        float x = Math.max(0f, Math.min(src.getWidth() - 1f, sourceX));
+        float y = Math.max(0f, Math.min(src.getHeight() - 1f, sourceY));
+        int x0 = (int) Math.floor(x);
+        int y0 = (int) Math.floor(y);
+        int x1 = Math.min(x0 + 1, src.getWidth() - 1);
+        int y1 = Math.min(y0 + 1, src.getHeight() - 1);
+        float tx = x - x0;
+        float ty = y - y0;
+
+        int c00 = src.getPixel(x0, y0);
+        int c10 = src.getPixel(x1, y0);
+        int c01 = src.getPixel(x0, y1);
+        int c11 = src.getPixel(x1, y1);
+
+        int a = bilinearChannel(c00, c10, c01, c11, 24, tx, ty);
+        int r = bilinearChannel(c00, c10, c01, c11, 16, tx, ty);
+        int g = bilinearChannel(c00, c10, c01, c11, 8, tx, ty);
+        int b = bilinearChannel(c00, c10, c01, c11, 0, tx, ty);
+        return (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
+    private static int sampleSmoothArgb(NativeImage src, float centerX, float centerY, float scaleX, float scaleY) {
+        if (scaleX <= 1.5f && scaleY <= 1.5f) {
+            return sampleBilinearArgb(src, centerX, centerY);
+        }
+
+        int samplesX = Math.min(5, Math.max(2, (int) Math.ceil(scaleX / 8f)));
+        int samplesY = Math.min(5, Math.max(2, (int) Math.ceil(scaleY / 8f)));
+        float startX = centerX - scaleX / 2f;
+        float startY = centerY - scaleY / 2f;
+        int total = samplesX * samplesY;
+        int aSum = 0;
+        int rSum = 0;
+        int gSum = 0;
+        int bSum = 0;
+
+        for (int yy = 0; yy < samplesY; yy++) {
+            float sy = startY + (yy + 0.5f) * scaleY / samplesY;
+            for (int xx = 0; xx < samplesX; xx++) {
+                float sx = startX + (xx + 0.5f) * scaleX / samplesX;
+                int argb = sampleBilinearArgb(src, sx, sy);
+                aSum += (argb >> 24) & 0xFF;
+                rSum += (argb >> 16) & 0xFF;
+                gSum += (argb >> 8) & 0xFF;
+                bSum += argb & 0xFF;
+            }
+        }
+
+        int a = Math.round((float) aSum / total);
+        int r = Math.round((float) rSum / total);
+        int g = Math.round((float) gSum / total);
+        int b = Math.round((float) bSum / total);
+        return (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
+    private static int bilinearChannel(int c00, int c10, int c01, int c11, int shift, float tx, float ty) {
+        float v00 = (c00 >> shift) & 0xFF;
+        float v10 = (c10 >> shift) & 0xFF;
+        float v01 = (c01 >> shift) & 0xFF;
+        float v11 = (c11 >> shift) & 0xFF;
+        float top = v00 + (v10 - v00) * tx;
+        float bottom = v01 + (v11 - v01) * tx;
+        return Math.max(0, Math.min(255, Math.round(top + (bottom - top) * ty)));
     }
 
     private void drawPanel(GuiGraphicsExtractor ctx, int x, int y, int w, int h) {
@@ -810,6 +915,7 @@ public class ScreenshotConfigScreen extends Screen {
 
     private static ScreenshotConfig.MenuButtonPosition[] menuButtonPositionValues() {
         return new ScreenshotConfig.MenuButtonPosition[] {
+                ScreenshotConfig.MenuButtonPosition.CENTER,
                 ScreenshotConfig.MenuButtonPosition.TOP_RIGHT,
                 ScreenshotConfig.MenuButtonPosition.TOP_LEFT,
                 ScreenshotConfig.MenuButtonPosition.BOTTOM_RIGHT,
