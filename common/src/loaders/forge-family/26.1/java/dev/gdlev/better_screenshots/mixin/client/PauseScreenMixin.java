@@ -4,6 +4,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import dev.gdlev.better_screenshots.client.ScreenshotConfig;
 import dev.gdlev.better_screenshots.client.ScreenshotConfigScreen;
 import dev.gdlev.better_screenshots.client.ScreenshotGalleryScreen;
+import dev.gdlev.better_screenshots.client.PauseMenuButtonLayout;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.components.SpriteIconButton;
 import net.minecraft.client.gui.screens.PauseScreen;
@@ -39,8 +40,7 @@ public abstract class PauseScreenMixin extends Screen {
 
     @Inject(method = "init", at = @At("RETURN"))
     private void onInit(CallbackInfo ci) {
-        ScreenshotConfig.MenuButtonPosition pos = ScreenshotConfig.get().menuButtonPosition;
-        if (pos == ScreenshotConfig.MenuButtonPosition.DISABLED) return;
+        PauseMenuButtonLayout.ensureMigrated();
 
         settingsMenu = SpriteIconButton.builder(
                         Component.translatable("better_screenshots.menu.settings"),
@@ -97,33 +97,16 @@ public abstract class PauseScreenMixin extends Screen {
                 .withTootip()
                 .build();
 
-        int x, y;
-        switch (pos) {
-            case TOP_LEFT -> {
-                x = 10;
-                y = 10;
-            }
-            case TOP_RIGHT -> {
-                x = this.width - 10 - 3 * BTN_SIZE - 2 * GAP;
-                y = 10;
-            }
-            case BOTTOM_LEFT -> {
-                x = 10;
-                y = this.height - 30;
-            }
-            case BOTTOM_RIGHT -> {
-                x = this.width - 10 - 3 * BTN_SIZE - 2 * GAP;
-                y = this.height - 30;
-            }
-            default -> { return; }
+        int[] x = new int[PauseMenuButtonLayout.ACTION_COUNT];
+        int[] y = new int[PauseMenuButtonLayout.ACTION_COUNT];
+        boolean[] visible = PauseMenuButtonLayout.visibility();
+        PauseMenuButtonLayout.arrangeCornerButtons(
+                x, y, this.width, this.height, BTN_SIZE, GAP, 10);
+        SpriteIconButton[] buttons = { settingsMenu, galleryButton, cameraButton };
+        for (int action = 0; action < buttons.length; action++) {
+            if (!visible[action]) continue;
+            buttons[action].setPosition(x[action], y[action]);
+            addRenderableWidget(buttons[action]);
         }
-
-        settingsMenu.setPosition(x, y);
-        galleryButton.setPosition(x + BTN_SIZE + GAP, y);
-        cameraButton.setPosition(x + 2 * (BTN_SIZE + GAP), y);
-
-        addRenderableWidget(cameraButton);
-        addRenderableWidget(galleryButton);
-        addRenderableWidget(settingsMenu);
     }
 }

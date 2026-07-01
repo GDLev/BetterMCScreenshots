@@ -4,6 +4,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import dev.gdlev.better_screenshots.client.ScreenshotConfig;
 import dev.gdlev.better_screenshots.client.ScreenshotConfigScreen;
 import dev.gdlev.better_screenshots.client.ScreenshotGalleryScreen;
+import dev.gdlev.better_screenshots.client.PauseMenuButtonLayout;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.components.SpriteIconButton;
 import net.minecraft.client.gui.layouts.LayoutElement;
@@ -50,55 +51,34 @@ public abstract class PauseScreenMixin extends Screen {
     )
     private LayoutElement addModButtonsToQuickActions(LinearLayout row, LayoutElement vanillaButton) {
         LayoutElement added = row.addChild(vanillaButton);
-        ScreenshotConfig.MenuButtonPosition pos = ScreenshotConfig.get().menuButtonPosition;
-        if (pos != ScreenshotConfig.MenuButtonPosition.CENTER) return added;
-
+        PauseMenuButtonLayout.ensureMigrated();
         createModButtons();
-        row.addChild(settingsMenu);
-        row.addChild(galleryButton);
-        row.addChild(cameraButton);
+        for (int action : PauseMenuButtonLayout.actionsAt(
+                ScreenshotConfig.PauseButtonAnchor.CENTER)) {
+            row.addChild(buttonForAction(action));
+        }
         return added;
     }
 
     @Inject(method = "init", at = @At("RETURN"))
     private void onInit(CallbackInfo ci) {
-        ScreenshotConfig.MenuButtonPosition pos = ScreenshotConfig.get().menuButtonPosition;
-        if (pos == ScreenshotConfig.MenuButtonPosition.DISABLED || pos == ScreenshotConfig.MenuButtonPosition.CENTER) return;
-
+        PauseMenuButtonLayout.ensureMigrated();
         createModButtons();
-
-        int x, y;
-        switch (pos) {
-            case TOP_LEFT -> {
-                x = 10;
-                y = 10;
-            }
-            case TOP_RIGHT -> {
-                x = this.width - 10 - 3 * BTN_SIZE - 2 * GAP;
-                y = 10;
-            }
-            case BOTTOM_LEFT -> {
-                x = 10;
-                y = this.height - 30;
-            }
-            case BOTTOM_RIGHT -> {
-                x = this.width - 10 - 3 * BTN_SIZE - 2 * GAP;
-                y = this.height - 30;
-            }
-            default -> { return; }
+        int[] x = new int[PauseMenuButtonLayout.ACTION_COUNT];
+        int[] y = new int[PauseMenuButtonLayout.ACTION_COUNT];
+        PauseMenuButtonLayout.arrangeCornerButtons(
+                x, y, this.width, this.height, BTN_SIZE, GAP, 10);
+        for (int action = 0; action < PauseMenuButtonLayout.ACTION_COUNT; action++) {
+            if (x[action] < 0) continue;
+            SpriteIconButton button = buttonForAction(action);
+            button.setPosition(x[action], y[action]);
+            addRenderableWidget(button);
         }
-
-        settingsMenu.setPosition(x, y);
-        galleryButton.setPosition(x + BTN_SIZE + GAP, y);
-        cameraButton.setPosition(x + 2 * (BTN_SIZE + GAP), y);
-
-        addRenderableWidget(cameraButton);
-        addRenderableWidget(galleryButton);
-        addRenderableWidget(settingsMenu);
     }
 
     @Unique
     private void createModButtons() {
+        if (settingsMenu != null && galleryButton != null && cameraButton != null) return;
         settingsMenu = SpriteIconButton.builder(
                         Component.translatable("better_screenshots.menu.settings"),
                         b -> dev.gdlev.better_screenshots.client.MinecraftCompat.setScreen(this.minecraft, new ScreenshotConfigScreen(this)),
@@ -153,5 +133,14 @@ public abstract class PauseScreenMixin extends Screen {
                         ICON_SIZE, ICON_SIZE)
                 .withTootip()
                 .build();
+    }
+
+    @Unique
+    private SpriteIconButton buttonForAction(int action) {
+        return switch (action) {
+            case PauseMenuButtonLayout.SETTINGS -> settingsMenu;
+            case PauseMenuButtonLayout.GALLERY -> galleryButton;
+            default -> cameraButton;
+        };
     }
 }

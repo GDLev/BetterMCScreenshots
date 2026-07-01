@@ -465,42 +465,48 @@ public class ScreenshotPreviewRenderer {
         // Action buttons (optional, file-only config)
         if (!cfg.hideMiniPreviewActionButtons) {
         boolean showUploadButton = ScreenshotUploader.isUploaderEnabled() && !cfg.uploadAutoUpload;
-        int visibleButtons = showUploadButton ? 4 : 3;
-        int totalBtnsW = visibleButtons * BTN_W + Math.max(0, visibleButtons - 1) * BTN_GAP;
-        int btnsStartX = drawX + drawWidth - totalBtnsW - 2;
-        int btnsY      = drawY + 2;
+        ScreenshotConfig.ActionButtonCorner[] corners = {
+                cfg.miniPreviewShowCorner,
+                cfg.miniPreviewCopyCorner,
+                cfg.miniPreviewUploadCorner,
+                cfg.miniPreviewDeleteCorner
+        };
+        int[] order = {
+                cfg.miniPreviewShowOrder,
+                cfg.miniPreviewCopyOrder,
+                cfg.miniPreviewUploadOrder,
+                cfg.miniPreviewDeleteOrder
+        };
+        boolean[] visible = {
+                cfg.miniPreviewShowVisible,
+                cfg.miniPreviewCopyVisible,
+                showUploadButton && cfg.miniPreviewUploadVisible,
+                cfg.miniPreviewDeleteVisible
+        };
+        ActionButtonLayout.arrange(
+                btnX, btnY, corners, order, visible, 4,
+                drawX, drawY, drawWidth, drawHeight,
+                BTN_W, BTN_H, BTN_GAP, 2);
 
-        // Convert raw window-space mouse coords to current GUI-space coords.
         double mouseX = mc.mouseHandler.xpos() * context.guiWidth() / mc.getWindow().getScreenWidth();
         double mouseY = mc.mouseHandler.ypos() * context.guiHeight() / mc.getWindow().getScreenHeight();
         hoveredButton = -1;
 
-        for (int i = 0; i < visibleButtons; i++) {
-            btnX[i] = btnsStartX + i * (BTN_W + BTN_GAP);
-            btnY[i] = btnsY;
+        for (int i = 0; i < 4; i++) {
+            if (!visible[i]) continue;
             if (mouseX >= btnX[i] && mouseX <= btnX[i] + BTN_W
                     && mouseY >= btnY[i] && mouseY <= btnY[i] + BTN_H) {
                 hoveredButton = i;
             }
         }
-        for (int i = visibleButtons; i < btnX.length; i++) {
-            btnX[i] = -100;
-            btnY[i] = -100;
-        }
-
-        ResourceLocation[] icons = showUploadButton
-                ? new ResourceLocation[] {
-                        hoveredButton == 0 ? ICON_SHOW_H   : ICON_SHOW,
-                        hoveredButton == 1 ? ICON_COPY_H   : ICON_COPY,
-                        hoveredButton == 2 ? ICON_UPLOAD_H : ICON_UPLOAD,
-                        hoveredButton == 3 ? ICON_DELETE_H : ICON_DELETE
-                }
-                : new ResourceLocation[] {
-                        hoveredButton == 0 ? ICON_SHOW_H  : ICON_SHOW,
-                        hoveredButton == 1 ? ICON_COPY_H  : ICON_COPY,
-                        hoveredButton == 2 ? ICON_DELETE_H: ICON_DELETE
-                };
-        for (int i = 0; i < visibleButtons; i++) {
+        ResourceLocation[] icons = {
+                hoveredButton == 0 ? ICON_SHOW_H : ICON_SHOW,
+                hoveredButton == 1 ? ICON_COPY_H : ICON_COPY,
+                hoveredButton == 2 ? ICON_UPLOAD_H : ICON_UPLOAD,
+                hoveredButton == 3 ? ICON_DELETE_H : ICON_DELETE
+        };
+        for (int i = 0; i < 4; i++) {
+            if (!visible[i]) continue;
             context.blit(RenderPipelines.GUI_TEXTURED, icons[i],
                     btnX[i], btnY[i], 0f, 0f,
                     BTN_W, BTN_H, BTN_W, BTN_H);
@@ -573,26 +579,24 @@ public class ScreenshotPreviewRenderer {
         ScreenshotConfig cfg = ScreenshotConfig.get();
         if (!cfg.hideMiniPreviewActionButtons) {
             boolean showUploadButton = ScreenshotUploader.isUploaderEnabled() && !cfg.uploadAutoUpload;
-            int visibleButtons = showUploadButton ? 4 : 3;
+            boolean[] visible = {
+                    cfg.miniPreviewShowVisible,
+                    cfg.miniPreviewCopyVisible,
+                    showUploadButton && cfg.miniPreviewUploadVisible,
+                    cfg.miniPreviewDeleteVisible
+            };
 
-            for (int i = 0; i < visibleButtons; i++) {
+            for (int i = 0; i < 4; i++) {
+                if (!visible[i]) continue;
                 if (btnX[i] == 0 && btnY[i] == 0) continue;
                 if (mouseX >= btnX[i] && mouseX <= btnX[i] + BTN_W
                         && mouseY >= btnY[i] && mouseY <= btnY[i] + BTN_H) {
                     playActionButtonClickSound();
-                    if (showUploadButton) {
-                        switch (i) {
-                            case 0 -> openFullscreen();
-                            case 1 -> copyToClipboard();
-                            case 2 -> uploadCurrentPreview();
-                            case 3 -> deleteCurrentPreview();
-                        }
-                    } else {
-                        switch (i) {
-                            case 0 -> openFullscreen();
-                            case 1 -> copyToClipboard();
-                            case 2 -> deleteCurrentPreview();
-                        }
+                    switch (i) {
+                        case 0 -> openFullscreen();
+                        case 1 -> copyToClipboard();
+                        case 2 -> uploadCurrentPreview();
+                        case 3 -> deleteCurrentPreview();
                     }
                     return true;
                 }

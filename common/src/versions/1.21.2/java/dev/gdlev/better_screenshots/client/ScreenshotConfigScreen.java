@@ -204,25 +204,15 @@ public class ScreenshotConfigScreen extends Screen {
                             loadThumbnails();
                         })));
 
-        // Menu Button Position
-        settingsWidgets.add(addRenderableWidget(CycleButton.builder(
-                        (ScreenshotConfig.MenuButtonPosition p) -> Component.translatable(switch (p) {
-                            case TOP_RIGHT    -> "better_screenshots.config.menu_button.top_right";
-                            case TOP_LEFT     -> "better_screenshots.config.menu_button.top_left";
-                            case BOTTOM_RIGHT -> "better_screenshots.config.menu_button.bottom_right";
-                            case BOTTOM_LEFT  -> "better_screenshots.config.menu_button.bottom_left";
-                            case CENTER       -> "better_screenshots.config.menu_button.center";
-                            case DISABLED     -> "better_screenshots.config.menu_button.disabled";
-                        }))
-                .withValues(menuButtonPositionValues())
-                .withInitialValue(ScreenshotConfig.get().menuButtonPosition)
-                .create(lx, ty + 14 + GAP * 7, COL_W, BTN_H,
-                        Component.translatable("better_screenshots.config.menu_button"),
-                        (btn, val) -> { ScreenshotConfig.get().menuButtonPosition = val; ScreenshotConfig.save(); })));
-
         settingsWidgets.add(addRenderableWidget(Button.builder(
                         Component.translatable("better_screenshots.config.uploader.configure"),
                         btn -> minecraft.setScreen(new UploaderConfigScreen(this)))
+                .bounds(lx, ty + 14 + GAP * 7, COL_W, BTN_H)
+                .build()));
+
+        settingsWidgets.add(addRenderableWidget(Button.builder(
+                        Component.translatable("better_screenshots.config.actions.configure"),
+                        btn -> minecraft.setScreen(new ActionButtonConfigScreen(this)))
                 .bounds(lx, ty + 14 + GAP * 8, COL_W, BTN_H)
                 .build()));
 
@@ -357,21 +347,30 @@ public class ScreenshotConfigScreen extends Screen {
             // Action buttons
             if (sel && i < thumbFiles.size() && thumbFiles.get(i) != null) {
                 boolean showUploadAction = ScreenshotUploader.isUploaderEnabled();
-                int visibleButtons = showUploadAction ? 4 : 3;
-                int totalBtnsW = visibleButtons * ACT_BTN_W + Math.max(0, visibleButtons - 1) * ACT_BTN_GAP;
-                int btnsStartX = tx + tw - totalBtnsW - 2;
-                int btnsY      = tty + 2;
+                ScreenshotConfig config = ScreenshotConfig.get();
+                ScreenshotConfig.ActionButtonCorner[] corners = {
+                        configMenuTopCorner(config.configMenuShowCorner),
+                        configMenuTopCorner(config.configMenuCopyCorner),
+                        configMenuTopCorner(config.configMenuUploadCorner),
+                        configMenuTopCorner(config.configMenuDeleteCorner)
+                };
+                int[] order = {
+                        config.configMenuShowOrder, config.configMenuCopyOrder,
+                        config.configMenuUploadOrder, config.configMenuDeleteOrder
+                };
+                boolean[] visible = {
+                        config.configMenuShowVisible, config.configMenuCopyVisible,
+                        showUploadAction && config.configMenuUploadVisible,
+                        config.configMenuDeleteVisible
+                };
+                ActionButtonLayout.arrange(
+                        actionBtnX, actionBtnY, corners, order, visible, 4,
+                        tx, tty, tw, th, ACT_BTN_W, ACT_BTN_H, ACT_BTN_GAP, 2);
+                ResourceLocation[] icons = { ICON_SHOW, ICON_COPY, ICON_UPLOAD, ICON_DELETE };
+                ResourceLocation[] iconsH = { ICON_SHOW_H, ICON_COPY_H, ICON_UPLOAD_H, ICON_DELETE_H };
 
-                ResourceLocation[] icons = showUploadAction
-                        ? new ResourceLocation[] { ICON_SHOW, ICON_COPY, ICON_UPLOAD, ICON_DELETE }
-                        : new ResourceLocation[] { ICON_SHOW, ICON_COPY, ICON_DELETE };
-                ResourceLocation[] iconsH = showUploadAction
-                        ? new ResourceLocation[] { ICON_SHOW_H, ICON_COPY_H, ICON_UPLOAD_H, ICON_DELETE_H }
-                        : new ResourceLocation[] { ICON_SHOW_H, ICON_COPY_H, ICON_DELETE_H };
-
-                for (int b = 0; b < visibleButtons; b++) {
-                    actionBtnX[b] = btnsStartX + b * (ACT_BTN_W + ACT_BTN_GAP);
-                    actionBtnY[b] = btnsY;
+                for (int b = 0; b < 4; b++) {
+                    if (!visible[b]) continue;
 
                     boolean btnHov = mouseX >= actionBtnX[b]
                             && mouseX <= actionBtnX[b] + ACT_BTN_W
@@ -383,10 +382,6 @@ public class ScreenshotConfigScreen extends Screen {
                             btnHov ? iconsH[b] : icons[b],
                             actionBtnX[b], actionBtnY[b],
                             0f, 0f, ACT_BTN_W, ACT_BTN_H, ACT_BTN_W, ACT_BTN_H);
-                }
-                for (int b = visibleButtons; b < actionBtnX.length; b++) {
-                    actionBtnX[b] = -100;
-                    actionBtnY[b] = -100;
                 }
             }
         }
@@ -519,24 +514,22 @@ public class ScreenshotConfigScreen extends Screen {
         // Show action buttons when selected
         if (selectedThumbIdx >= 0) {
             boolean showUploadAction = ScreenshotUploader.isUploaderEnabled();
-            int visibleButtons = showUploadAction ? 4 : 3;
-            for (int i = 0; i < visibleButtons; i++) {
+            ScreenshotConfig config = ScreenshotConfig.get();
+            boolean[] visible = {
+                    config.configMenuShowVisible, config.configMenuCopyVisible,
+                    showUploadAction && config.configMenuUploadVisible,
+                    config.configMenuDeleteVisible
+            };
+            for (int i = 0; i < 4; i++) {
+                if (!visible[i]) continue;
                 if (mouseX >= actionBtnX[i] && mouseX <= actionBtnX[i] + ACT_BTN_W
                         && mouseY >= actionBtnY[i] && mouseY <= actionBtnY[i] + ACT_BTN_H) {
                     playActionButtonClickSound();
-                    if (showUploadAction) {
-                        switch (i) {
-                            case 0 -> openFullscreen(selectedThumbIdx);
-                            case 1 -> copyFile(selectedThumbIdx);
-                            case 2 -> uploadFile(selectedThumbIdx);
-                            case 3 -> deleteFile(selectedThumbIdx);
-                        }
-                    } else {
-                        switch (i) {
-                            case 0 -> openFullscreen(selectedThumbIdx);
-                            case 1 -> copyFile(selectedThumbIdx);
-                            case 2 -> deleteFile(selectedThumbIdx);
-                        }
+                    switch (i) {
+                        case 0 -> openFullscreen(selectedThumbIdx);
+                        case 1 -> copyFile(selectedThumbIdx);
+                        case 2 -> uploadFile(selectedThumbIdx);
+                        case 3 -> deleteFile(selectedThumbIdx);
                     }
                     return true;
                 }
@@ -574,6 +567,14 @@ public class ScreenshotConfigScreen extends Screen {
             }
         }
         return false;
+    }
+
+    private static ScreenshotConfig.ActionButtonCorner configMenuTopCorner(
+            ScreenshotConfig.ActionButtonCorner corner) {
+        return corner == ScreenshotConfig.ActionButtonCorner.TOP_LEFT
+                || corner == ScreenshotConfig.ActionButtonCorner.BOTTOM_LEFT
+                ? ScreenshotConfig.ActionButtonCorner.TOP_LEFT
+                : ScreenshotConfig.ActionButtonCorner.TOP_RIGHT;
     }
 
     private void playActionButtonClickSound() {
@@ -908,14 +909,4 @@ public class ScreenshotConfigScreen extends Screen {
         context.fill(barX, barY, barX + fillW, barY + UPLOAD_BAR_H, color);
     }
 
-    private static ScreenshotConfig.MenuButtonPosition[] menuButtonPositionValues() {
-        return new ScreenshotConfig.MenuButtonPosition[] {
-                ScreenshotConfig.MenuButtonPosition.CENTER,
-                ScreenshotConfig.MenuButtonPosition.TOP_RIGHT,
-                ScreenshotConfig.MenuButtonPosition.TOP_LEFT,
-                ScreenshotConfig.MenuButtonPosition.BOTTOM_RIGHT,
-                ScreenshotConfig.MenuButtonPosition.BOTTOM_LEFT,
-                ScreenshotConfig.MenuButtonPosition.DISABLED
-        };
-    }
 }

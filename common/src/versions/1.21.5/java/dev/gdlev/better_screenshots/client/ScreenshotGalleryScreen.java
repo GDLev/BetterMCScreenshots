@@ -232,7 +232,11 @@ public class ScreenshotGalleryScreen extends Screen {
                 int argb = pixelated
                         ? src.getPixel(sx, sy)
                         : sampleSmoothArgb(src, sourceX, sourceY, scaleX, scaleY);
-                dst.setPixel(x, y, argb);
+                int a    = (argb >> 24) & 0xFF;
+                int r    = (argb >> 16) & 0xFF;
+                int g    = (argb >>  8) & 0xFF;
+                int b    =  argb        & 0xFF;
+                dst.setPixelABGR(x, y, (a << 24) | (b << 16) | (g << 8) | r);
             }
         }
         return dst;
@@ -396,24 +400,23 @@ public class ScreenshotGalleryScreen extends Screen {
 
         if (selectedIdx >= 0) {
             boolean showUploadAction = ScreenshotUploader.isUploaderEnabled();
-            int visibleButtons = showUploadAction ? 4 : 3;
-            for (int i = 0; i < visibleButtons; i++) {
+            ScreenshotConfig config = ScreenshotConfig.get();
+            boolean[] visible = {
+                    config.galleryShowVisible,
+                    config.galleryCopyVisible,
+                    showUploadAction && config.galleryUploadVisible,
+                    config.galleryDeleteVisible
+            };
+            for (int i = 0; i < 4; i++) {
+                if (!visible[i]) continue;
                 if (mouseX >= actionBtnX[i] && mouseX <= actionBtnX[i] + ACT_BTN_W
                         && mouseY >= actionBtnY[i] && mouseY <= actionBtnY[i] + ACT_BTN_H) {
                     playActionButtonClickSound();
-                    if (showUploadAction) {
-                        switch (i) {
-                            case 0 -> openFullscreen(selectedIdx);
-                            case 1 -> copyFile(selectedIdx);
-                            case 2 -> uploadFile(selectedIdx);
-                            case 3 -> deleteFile(selectedIdx);
-                        }
-                    } else {
-                        switch (i) {
-                            case 0 -> openFullscreen(selectedIdx);
-                            case 1 -> copyFile(selectedIdx);
-                            case 2 -> deleteFile(selectedIdx);
-                        }
+                    switch (i) {
+                        case 0 -> openFullscreen(selectedIdx);
+                        case 1 -> copyFile(selectedIdx);
+                        case 2 -> uploadFile(selectedIdx);
+                        case 3 -> deleteFile(selectedIdx);
                     }
                     return true;
                 }
@@ -594,6 +597,7 @@ public class ScreenshotGalleryScreen extends Screen {
             context.fill(tx, topPad, tx + 3, topPad + visibleH, 0x33FFFFFF);
             context.fill(tx, tmbY,    tx + 3, tmbY + tmbH,      0xBBFFFFFF);
         }
+
     }
 
     private void drawSelectedPanel(GuiGraphics context) {
@@ -619,26 +623,39 @@ public class ScreenshotGalleryScreen extends Screen {
 
             // Action buttons
             boolean showUploadAction = ScreenshotUploader.isUploaderEnabled();
-            int visibleButtons = showUploadAction ? 4 : 3;
-            int totalBtnsW = visibleButtons * ACT_BTN_W + Math.max(0, visibleButtons - 1) * ACT_BTN_GAP;
-            int btnsStartX = thumbX + thumbW - totalBtnsW - 2;
-            int btnsY      = thumbY + 2;
+            ScreenshotConfig config = ScreenshotConfig.get();
+            ScreenshotConfig.ActionButtonCorner[] corners = {
+                    config.galleryShowCorner,
+                    config.galleryCopyCorner,
+                    config.galleryUploadCorner,
+                    config.galleryDeleteCorner
+            };
+            int[] order = {
+                    config.galleryShowOrder,
+                    config.galleryCopyOrder,
+                    config.galleryUploadOrder,
+                    config.galleryDeleteOrder
+            };
+            boolean[] visible = {
+                    config.galleryShowVisible,
+                    config.galleryCopyVisible,
+                    showUploadAction && config.galleryUploadVisible,
+                    config.galleryDeleteVisible
+            };
+            ActionButtonLayout.arrange(
+                    actionBtnX, actionBtnY, corners, order, visible, 4,
+                    thumbX, thumbY, thumbW, thumbH,
+                    ACT_BTN_W, ACT_BTN_H, ACT_BTN_GAP, 2);
 
             Minecraft mc = Minecraft.getInstance();
             double mouseX = mc.mouseHandler.xpos() * this.width / mc.getWindow().getScreenWidth();
             double mouseY = mc.mouseHandler.ypos() * this.height / mc.getWindow().getScreenHeight();
 
-            ResourceLocation[] icons = showUploadAction
-                    ? new ResourceLocation[] { ICON_SHOW, ICON_COPY, ICON_UPLOAD, ICON_DELETE }
-                    : new ResourceLocation[] { ICON_SHOW, ICON_COPY, ICON_DELETE };
-            ResourceLocation[] iconsH = showUploadAction
-                    ? new ResourceLocation[] { ICON_SHOW_H, ICON_COPY_H, ICON_UPLOAD_H, ICON_DELETE_H }
-                    : new ResourceLocation[] { ICON_SHOW_H, ICON_COPY_H, ICON_DELETE_H };
+            ResourceLocation[] icons = { ICON_SHOW, ICON_COPY, ICON_UPLOAD, ICON_DELETE };
+            ResourceLocation[] iconsH = { ICON_SHOW_H, ICON_COPY_H, ICON_UPLOAD_H, ICON_DELETE_H };
 
-            for (int i = 0; i < visibleButtons; i++) {
-                actionBtnX[i] = btnsStartX + i * (ACT_BTN_W + ACT_BTN_GAP);
-                actionBtnY[i] = btnsY;
-
+            for (int i = 0; i < 4; i++) {
+                if (!visible[i]) continue;
                 boolean hov = mouseX >= actionBtnX[i]
                         && mouseX <= actionBtnX[i] + ACT_BTN_W
                         && mouseY >= actionBtnY[i]
@@ -650,11 +667,6 @@ public class ScreenshotGalleryScreen extends Screen {
                         actionBtnX[i], actionBtnY[i],
                         0f, 0f, ACT_BTN_W, ACT_BTN_H, ACT_BTN_W, ACT_BTN_H);
             }
-            for (int i = visibleButtons; i < actionBtnX.length; i++) {
-                actionBtnX[i] = -100;
-                actionBtnY[i] = -100;
-            }
-
             context.disableScissor();
         } else {
             for (int i = 0; i < actionBtnX.length; i++) {

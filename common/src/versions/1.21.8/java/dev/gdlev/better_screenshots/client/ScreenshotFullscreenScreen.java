@@ -57,6 +57,8 @@ public class ScreenshotFullscreenScreen extends Screen {
     private static final long COPY_FLASH_MS = 500L;
     private static final int UPLOAD_BAR_H = 2;
     private static final long UPLOAD_STATE_HOLD_MS = 1400L;
+    private final int[] actionBtnX = new int[4];
+    private final int[] actionBtnY = new int[4];
 
     // ── Screen state ──────────────────────────────────────────────────────────
 
@@ -374,46 +376,49 @@ public class ScreenshotFullscreenScreen extends Screen {
         if (alpha <= 0f) return;
 
         boolean showUploadAction = ScreenshotUploader.isUploaderEnabled();
-        int visibleButtons = showUploadAction ? 3 : 2;
-        int totalBtnsW = visibleButtons * ACT_BTN_W;
-        int btnsStartX = imgX + imgW - totalBtnsW - 8; // 8px marginesu od krawędzi zdjęcia
-        int btnsY      = imgY + 8;
-        int closeX = imgX + 8;
-        int closeY = btnsY;
-        boolean closeHov = mouseX >= closeX && mouseX <= closeX + ACT_BTN_W
-                && mouseY >= closeY && mouseY <= closeY + ACT_BTN_H;
-        context.blit(RenderPipelines.GUI_TEXTURED, closeHov ? ICON_CLOSE_H : ICON_CLOSE,
-                closeX, closeY, 0f, 0f, ACT_BTN_W, ACT_BTN_H, ACT_BTN_W, ACT_BTN_H);
-
-        if (screenshotFiles.isEmpty() || currentFileIndex < 0) return;
-
-
-        // Ikona Copy
-        int copyX = btnsStartX;
-        boolean copyHov = mouseX >= copyX && mouseX <= copyX + ACT_BTN_W
-                && mouseY >= btnsY && mouseY <= btnsY + ACT_BTN_H;
-
-        context.blit(RenderPipelines.GUI_TEXTURED, copyHov ? ICON_COPY_H : ICON_COPY,
-                copyX, btnsY, 0f, 0f, ACT_BTN_W, ACT_BTN_H, ACT_BTN_W, ACT_BTN_H);
-
-        int delX;
-        if (showUploadAction) {
-            int uploadX = btnsStartX + ACT_BTN_W;
-            boolean uploadHov = mouseX >= uploadX && mouseX <= uploadX + ACT_BTN_W
-                    && mouseY >= btnsY && mouseY <= btnsY + ACT_BTN_H;
-            context.blit(RenderPipelines.GUI_TEXTURED, uploadHov ? ICON_UPLOAD_H : ICON_UPLOAD,
-                    uploadX, btnsY, 0f, 0f, ACT_BTN_W, ACT_BTN_H, ACT_BTN_W, ACT_BTN_H);
-            delX = uploadX + ACT_BTN_W;
-        } else {
-            delX = btnsStartX + ACT_BTN_W;
+        boolean[] visible = layoutActionButtons(imgX, imgY, imgW, imgH, showUploadAction);
+        ResourceLocation[] icons = { ICON_CLOSE, ICON_COPY, ICON_UPLOAD, ICON_DELETE };
+        ResourceLocation[] hoverIcons = { ICON_CLOSE_H, ICON_COPY_H, ICON_UPLOAD_H, ICON_DELETE_H };
+        for (int i = 0; i < 4; i++) {
+            if (!visible[i]) continue;
+            boolean hovered = mouseX >= actionBtnX[i]
+                    && mouseX <= actionBtnX[i] + ACT_BTN_W
+                    && mouseY >= actionBtnY[i]
+                    && mouseY <= actionBtnY[i] + ACT_BTN_H;
+            context.blit(RenderPipelines.GUI_TEXTURED,
+                    hovered ? hoverIcons[i] : icons[i],
+                    actionBtnX[i], actionBtnY[i], 0f, 0f,
+                    ACT_BTN_W, ACT_BTN_H, ACT_BTN_W, ACT_BTN_H);
         }
+    }
 
-        // Ikona Delete
-        boolean delHov = mouseX >= delX && mouseX <= delX + ACT_BTN_W
-                && mouseY >= btnsY && mouseY <= btnsY + ACT_BTN_H;
-
-        context.blit(RenderPipelines.GUI_TEXTURED, delHov ? ICON_DELETE_H : ICON_DELETE,
-                delX, btnsY, 0f, 0f, ACT_BTN_W, ACT_BTN_H, ACT_BTN_W, ACT_BTN_H);
+    private boolean[] layoutActionButtons(
+            int imgX, int imgY, int imgW, int imgH, boolean showUploadAction) {
+        boolean hasFileActions = !screenshotFiles.isEmpty() && currentFileIndex >= 0;
+        ScreenshotConfig config = ScreenshotConfig.get();
+        ScreenshotConfig.ActionButtonCorner[] corners = {
+                config.fullscreenCloseCorner,
+                config.fullscreenCopyCorner,
+                config.fullscreenUploadCorner,
+                config.fullscreenDeleteCorner
+        };
+        int[] order = {
+                config.fullscreenCloseOrder,
+                config.fullscreenCopyOrder,
+                config.fullscreenUploadOrder,
+                config.fullscreenDeleteOrder
+        };
+        boolean[] visible = {
+                config.fullscreenCloseVisible,
+                hasFileActions && config.fullscreenCopyVisible,
+                hasFileActions && showUploadAction && config.fullscreenUploadVisible,
+                hasFileActions && config.fullscreenDeleteVisible
+        };
+        ActionButtonLayout.arrange(
+                actionBtnX, actionBtnY, corners, order, visible, 4,
+                imgX, imgY, imgW, imgH,
+                ACT_BTN_W, ACT_BTN_H, ACT_BTN_GAP, 8);
+        return visible;
     }
 
     private void drawArrows(GuiGraphics context,
@@ -744,52 +749,27 @@ public class ScreenshotFullscreenScreen extends Screen {
         int targetX  = (this.width  - targetW) / 2;
         int targetY  = (this.height - targetH) / 2;
 
-        // 1. Sprawdzanie przycisków akcji
         boolean showUploadAction = ScreenshotUploader.isUploaderEnabled();
-        int visibleButtons = showUploadAction ? 3 : 2;
-        int totalBtnsW = visibleButtons * ACT_BTN_W;
-        int btnsStartX = targetX + targetW - totalBtnsW - 8;
-        int btnsY      = targetY + 8;
-
-        int closeX = targetX + 8;
-        int closeY = btnsY;
-        if (mouseX >= closeX && mouseX <= closeX + ACT_BTN_W
-                && mouseY >= closeY && mouseY <= closeY + ACT_BTN_H) {
-            playActionButtonClickSound();
-            closeLikeEscape();
-            return true;
-        }
-
-        if (screenshotFiles.isEmpty() || currentFileIndex < 0) return false;
-
-        int copyX = btnsStartX;
-        if (mouseX >= copyX && mouseX <= copyX + ACT_BTN_W
-                && mouseY >= btnsY && mouseY <= btnsY + ACT_BTN_H) {
-            playActionButtonClickSound();
-            ScreenshotPreviewRenderer.copyFileToClipboard(screenshotFiles.get(currentFileIndex));
-            copyFlashAlpha = 1f;
-            copyFlashLastFrameMs = -1L;
-            return true;
-        }
-
-        int delX;
-        if (showUploadAction) {
-            int uploadX = btnsStartX + ACT_BTN_W;
-            if (mouseX >= uploadX && mouseX <= uploadX + ACT_BTN_W
-                    && mouseY >= btnsY && mouseY <= btnsY + ACT_BTN_H) {
-                playActionButtonClickSound();
-                uploadCurrent();
-                return true;
+        boolean[] visible =
+                layoutActionButtons(targetX, targetY, targetW, targetH, showUploadAction);
+        for (int i = 0; i < 4; i++) {
+            if (!visible[i]) continue;
+            if (mouseX < actionBtnX[i] || mouseX > actionBtnX[i] + ACT_BTN_W
+                    || mouseY < actionBtnY[i] || mouseY > actionBtnY[i] + ACT_BTN_H) {
+                continue;
             }
-            delX = uploadX + ACT_BTN_W;
-        } else {
-            delX = btnsStartX + ACT_BTN_W;
-        }
-
-        if (mouseX >= delX && mouseX <= delX + ACT_BTN_W
-                && mouseY >= btnsY && mouseY <= btnsY + ACT_BTN_H) {
             playActionButtonClickSound();
-            deleteCurrent();
+            if (i == 0) {
+                closeLikeEscape();
+            } else if (i == 1) {
+                ScreenshotPreviewRenderer.copyFileToClipboard(screenshotFiles.get(currentFileIndex));
+                copyFlashAlpha = 1f;
+                copyFlashLastFrameMs = -1L;
+            } else if (i == 2) {
+                uploadCurrent();
+            } else {
+                deleteCurrent();
+            }
             return true;
         }
 
