@@ -302,8 +302,22 @@ public class ScreenshotPreviewRenderer {
     private static float easeOutCubic(float t) { return 1f - (float) Math.pow(1f - t, 3); }
     private static float easeInCubic(float t)  { return t * t * t; }
     private static float easeOutQuad(float t)  { return 1f - (1f - t) * (1f - t); }
+    private static boolean renderedInChatLayer = false;
 
     public static void render(GuiGraphics context) {
+        if (renderedInChatLayer) {
+            renderedInChatLayer = false;
+            return;
+        }
+        renderPreview(context);
+    }
+
+    public static void renderInChatLayer(GuiGraphics context) {
+        renderedInChatLayer = true;
+        renderPreview(context);
+    }
+
+    private static void renderPreview(GuiGraphics context) {
         long now = System.currentTimeMillis();
         if (showFrom == -1) return;
         if (previewTexture == null || previewTexture.getPixels() == null) return;

@@ -11,8 +11,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Gui.class)
 public class GuiMixin {
-    @Inject(method = "render", at = @At("RETURN"))
-    private void betterScreenshots$renderPreview(GuiGraphics graphics, DeltaTracker deltaTracker, CallbackInfo ci) {
-        ScreenshotPreviewRenderer.render(graphics);
+
+    @Inject(method = "renderChat", at = @At("TAIL"))
+    private void renderPreviewAfterChat(
+            GuiGraphics context, DeltaTracker deltaTracker, CallbackInfo ci) {
+        ScreenshotPreviewRenderer.renderInChatLayer(context);
     }
 }

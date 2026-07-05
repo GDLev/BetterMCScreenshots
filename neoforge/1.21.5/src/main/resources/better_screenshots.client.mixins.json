@@ -4,6 +4,7 @@
   "package": "dev.gdlev.better_screenshots.mixin.client",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "GuiMixin",
     "ScreenshotRecorderMixin",
     "ScreenMixin",
     "PauseScreenMixin",

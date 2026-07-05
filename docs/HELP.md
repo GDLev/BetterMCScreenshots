@@ -28,14 +28,14 @@ This guide explains how to use the mod in normal gameplay, what each feature doe
 - If upload is enabled, an upload progress bar can appear on the thumbnail.
 - If auto-upload is enabled, upload starts automatically after capture.
 - The mini preview can be opened in fullscreen by double-clicking the image.
-- The mini preview no longer has a hide-only close button. Its last action button is `Delete`, which deletes the screenshot file and closes the preview.
+- The `Delete` action deletes the screenshot file and closes the preview.
 
 ## Fullscreen preview behavior
 
 - Opens the current screenshot in a large centered view.
 - Supports next/previous navigation with arrows and mouse wheel when a screenshot list is available.
 - Supports action buttons (`Copy`, optional `Upload`, `Delete`) in supported contexts.
-- Shows a `Close` button on the left side of the image. It closes fullscreen preview just like pressing `Esc`.
+- The `Close` action closes fullscreen preview just like pressing `Esc`.
 - Uses animated transitions if enabled.
 - In reduced/read-only fullscreen contexts, the close button remains available, while file actions and navigation arrows are hidden when there is no screenshot list/action context.
 
@@ -55,7 +55,28 @@ This guide explains how to use the mod in normal gameplay, what each feature doe
 - Supports opening fullscreen preview from the `Show` action button.
 - Supports opening fullscreen preview by double-clicking a thumbnail.
 - Lets you open uploader configuration.
+- Lets you open the button layout editor.
 - Lets you open full gallery.
+
+## Button layout configuration
+
+- Open `Configure Buttons` from the main configuration screen.
+- Choose which interface you want to customize:
+  - Mini Preview.
+  - Gallery.
+  - Configuration Menu.
+  - Fullscreen.
+  - Pause Menu.
+- Drag a button to move it to another available anchor.
+- Drop a button between other buttons at the same anchor to change their order.
+- Drag a button into the side panel to hide it from the selected interface.
+- Drag a hidden button from the side panel back into the preview to restore it.
+- Buttons snap to the available corners when released.
+- Mini Preview, Gallery, and Fullscreen layouts support all four corners.
+- The Configuration Menu layout supports the top-left and top-right corners.
+- Pause Menu buttons can use the locations shown in its editor preview. Available anchors depend on the Minecraft version and its native menu layout.
+- Each interface stores its button positions, order, and visibility independently.
+- The editor preview shows how mod buttons fit around the interface's native controls.
 
 ## Chat notifications and clipboard behavior
 
@@ -95,9 +116,12 @@ This guide explains how to use the mod in normal gameplay, what each feature doe
 - Config screen selected thumbnail:
   - `Show`, `Copy`, optional `Upload`, `Delete`.
 - Fullscreen preview:
-  - Left side: `Close`.
-  - Right side: `Copy`, optional `Upload`, `Delete` when file actions are available.
+  - `Close`, plus `Copy`, optional `Upload`, and `Delete` when file actions are available.
   - Reduced/read-only fullscreen preview may show only `Close`.
+- Pause Menu:
+  - Mod configuration, gallery, and screenshot buttons can be positioned or hidden independently.
+
+The position, order, and visibility of these buttons are controlled through `Configure Buttons`.
 
 ## Other controls
 

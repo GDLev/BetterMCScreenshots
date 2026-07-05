@@ -60,6 +60,8 @@ def sharedJavaLayers = [
 
         "loaders/forge-family/all"           : allVariants.findAll { it.startsWith("neoforge/") || it.startsWith("forge/") },
         "loaders/forge-family/1.21-1.21.3"   : ["neoforge/1.21", "neoforge/1.21.2", "forge/1.21", "forge/1.21.3"],
+        "loaders/forge-family/1.21-1.21.5-gui": ["neoforge/1.21", "neoforge/1.21.2", "neoforge/1.21.5",
+                                                 "forge/1.21", "forge/1.21.3", "forge/1.21.5"],
         "loaders/forge-family/1.21.3-1.21.8" : ["neoforge/1.21.2", "neoforge/1.21.5", "neoforge/1.21.8",
                                                 "forge/1.21.3", "forge/1.21.5", "forge/1.21.8"],
         "loaders/forge-family/1.21.5-1.21.8" : ["neoforge/1.21.5", "neoforge/1.21.8", "forge/1.21.5", "forge/1.21.8"],
@@ -122,7 +124,7 @@ subprojects {
     }
 }
 
-def modVersion = "1.7"
+def modVersion = "1.7.1"
 def versions = [
         "fabric/26.2",
         "fabric/26.1",
