@@ -290,6 +290,8 @@ public class ScreenshotPreviewRenderer {
         if (previewTexture == null || previewTexture.getPixels() == null) return;
 
         Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || mc.player == null) return;
+
         ScreenshotConfig cfg = ScreenshotConfig.get();
 
         int screenW    = context.guiWidth();

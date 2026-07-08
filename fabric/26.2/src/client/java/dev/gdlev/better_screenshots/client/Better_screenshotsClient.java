@@ -4,7 +4,6 @@ import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
-import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -16,7 +15,6 @@ public class Better_screenshotsClient implements ClientModInitializer {
 
     public static final Identifier SHUTTER_SOFT_ID    = Identifier.fromNamespaceAndPath("better_screenshots", "shutter_soft");
     public static final Identifier SHUTTER_CLASSIC_ID = Identifier.fromNamespaceAndPath("better_screenshots", "shutter_classic");
-    private static final Identifier HUD_PREVIEW_ID    = Identifier.fromNamespaceAndPath("better_screenshots", "preview_hud");
     public static SoundEvent SHUTTER_SOFT;
     public static SoundEvent SHUTTER_CLASSIC;
 
@@ -44,9 +42,6 @@ public class Better_screenshotsClient implements ClientModInitializer {
                 dev.gdlev.better_screenshots.client.MinecraftCompat.setScreen(client, new ScreenshotConfigScreen(dev.gdlev.better_screenshots.client.MinecraftCompat.screen(client)));
             }
         });
-
-        // Connecting the renderer to the HUD
-        HudElementRegistry.addLast(HUD_PREVIEW_ID, (context, deltaTracker) -> ScreenshotPreviewRenderer.render(context));
 
         // Command mapping
         net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback.EVENT

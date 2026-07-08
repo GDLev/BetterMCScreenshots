@@ -11,7 +11,6 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
-import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import org.lwjgl.glfw.GLFW;
 
 @EventBusSubscriber(modid = Better_screenshots.MODID, value = Dist.CLIENT)
@@ -36,11 +35,6 @@ public class Better_screenshotsClient {
         if (openConfigKey != null && openConfigKey.consumeClick()) {
             dev.gdlev.better_screenshots.client.MinecraftCompat.setScreen(client, new ScreenshotConfigScreen(dev.gdlev.better_screenshots.client.MinecraftCompat.screen(client)));
         }
-    }
-
-    @SubscribeEvent
-    public static void onRenderGui(RenderGuiEvent.Post event) {
-        ScreenshotPreviewRenderer.render(event.getGuiGraphics());
     }
 
     @SubscribeEvent
