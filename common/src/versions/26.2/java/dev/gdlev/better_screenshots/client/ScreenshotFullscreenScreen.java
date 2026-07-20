@@ -386,7 +386,43 @@ public class ScreenshotFullscreenScreen extends Screen {
                     hovered ? hoverIcons[i] : icons[i],
                     actionBtnX[i], actionBtnY[i], 0f, 0f,
                     ACT_BTN_W, ACT_BTN_H, ACT_BTN_W, ACT_BTN_H);
+            if (hovered) {
+                drawActionTooltip(context, mouseX, mouseY, i, true);
+            }
         }
+    }
+
+    private void drawActionTooltip(
+            GuiGraphicsExtractor context,
+            double mouseX,
+            double mouseY,
+            int action,
+            boolean closeFirst) {
+        if (action < 0 || !ScreenshotConfig.get().actionButtonTooltips) return;
+        Component text = actionTooltip(action, closeFirst);
+        int textW = font.width(text);
+        int x = Math.min((int) mouseX + 10, this.width - textW - 8);
+        int y = Math.min((int) mouseY + 10, this.height - 16);
+        x = Math.max(4, x);
+        y = Math.max(4, y);
+        context.fill(x - 3, y - 3, x + textW + 3, y + 11, 0xF0101010);
+        context.fill(x - 3, y - 3, x + textW + 3, y - 2, 0xFF555555);
+        context.fill(x - 3, y + 10, x + textW + 3, y + 11, 0xFF555555);
+        context.fill(x - 3, y - 3, x - 2, y + 11, 0xFF555555);
+        context.fill(x + textW + 2, y - 3, x + textW + 3, y + 11, 0xFF555555);
+        context.centeredText(font, text, x + textW / 2, y, 0xFFFFFFFF);
+    }
+
+    private Component actionTooltip(int action, boolean closeFirst) {
+        return Component.translatable(switch (action) {
+            case 0 -> closeFirst
+                    ? "better_screenshots.config.actions.action.close"
+                    : "better_screenshots.config.actions.action.show";
+            case 1 -> "better_screenshots.config.actions.action.copy";
+            case 2 -> "better_screenshots.config.actions.action.upload";
+            case 3 -> "better_screenshots.config.actions.action.delete";
+            default -> "better_screenshots.config.actions.configure";
+        });
     }
 
     private boolean[] layoutActionButtons(

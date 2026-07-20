@@ -124,6 +124,19 @@ public class ScreenshotConfigScreen extends Screen {
         // Settings
 
         settingsWidgets.add(addRenderableWidget(CycleButton.builder(
+                        (Boolean enabled) -> Component.translatable(enabled
+                                ? "better_screenshots.config.action_tooltips.on"
+                                : "better_screenshots.config.action_tooltips.off"),
+                        ScreenshotConfig.get().actionButtonTooltips)
+                .withValues(Boolean.TRUE, Boolean.FALSE)
+                .create(lx, ty + 14, COL_W, BTN_H,
+                        Component.translatable("better_screenshots.config.action_tooltips"),
+                        (btn, val) -> {
+                            ScreenshotConfig.get().actionButtonTooltips = val;
+                            ScreenshotConfig.save();
+                        })));
+
+        settingsWidgets.add(addRenderableWidget(CycleButton.builder(
                         (ScreenshotConfig.Corner c) -> Component.translatable(switch (c) {
                             case BOTTOM_RIGHT -> "better_screenshots.config.corner.bottom_right";
                             case BOTTOM_LEFT  -> "better_screenshots.config.corner.bottom_left";
@@ -132,7 +145,7 @@ public class ScreenshotConfigScreen extends Screen {
                         }),
                         ScreenshotConfig.get().corner)
                 .withValues(ScreenshotConfig.Corner.values())
-                .create(lx, ty + 14, COL_W, BTN_H,
+                .create(lx, ty + 14 + GAP, COL_W, BTN_H,
                         Component.translatable("better_screenshots.config.corner"),
                         (btn, val) -> { ScreenshotConfig.get().corner = val; ScreenshotConfig.save(); })));
 
@@ -144,7 +157,7 @@ public class ScreenshotConfigScreen extends Screen {
                         }),
                         ScreenshotConfig.get().animationsMode)
                 .withValues(ScreenshotConfig.AnimationsMode.values())
-                .create(lx, ty + 14 + GAP, COL_W, BTN_H,
+                .create(lx, ty + 14 + GAP * 2, COL_W, BTN_H,
                         Component.translatable("better_screenshots.config.animations"),
                         (btn, val) -> {
                             ScreenshotConfig.get().animationsMode = val;
@@ -160,7 +173,7 @@ public class ScreenshotConfigScreen extends Screen {
                         }),
                         ScreenshotConfig.get().shutterSound)
                 .withValues(ScreenshotConfig.ShutterSound.values())
-                .create(lx, ty + 14 + GAP * 2, COL_W, BTN_H,
+                .create(lx, ty + 14 + GAP * 3, COL_W, BTN_H,
                         Component.translatable("better_screenshots.config.sound"),
                         (btn, val) -> { ScreenshotConfig.get().shutterSound = val; ScreenshotConfig.save(); })));
 
@@ -171,7 +184,7 @@ public class ScreenshotConfigScreen extends Screen {
                         }),
                         ScreenshotConfig.get().flashMode)
                 .withValues(ScreenshotConfig.FlashMode.values())
-                .create(lx, ty + 14 + GAP * 3, COL_W, BTN_H,
+                .create(lx, ty + 14 + GAP * 4, COL_W, BTN_H,
                         Component.translatable("better_screenshots.config.flash"),
                         (btn, val) -> { ScreenshotConfig.get().flashMode = val; ScreenshotConfig.save(); })));
 
@@ -183,14 +196,14 @@ public class ScreenshotConfigScreen extends Screen {
                         }),
                         ScreenshotConfig.get().chatNotification)
                 .withValues(ScreenshotConfig.ChatNotification.values())
-                .create(lx, ty + 14 + GAP * 4, COL_W, BTN_H,
+                .create(lx, ty + 14 + GAP * 5, COL_W, BTN_H,
                         Component.translatable("better_screenshots.config.chat"),
                         (btn, val) -> { ScreenshotConfig.get().chatNotification = val; ScreenshotConfig.save(); })));
 
         // Preview time Slider
         double initialDuration = (ScreenshotConfig.get().previewDurationSeconds - 1.0) / 14.0;
         settingsWidgets.add(addRenderableWidget(new DurationSlider(
-                lx, ty + 14 + GAP * 5, COL_W, BTN_H, initialDuration)));
+                lx, ty + 14 + GAP * 6, COL_W, BTN_H, initialDuration)));
 
         settingsWidgets.add(addRenderableWidget(CycleButton.builder(
                         (Boolean enabled) -> Component.translatable(enabled
@@ -198,7 +211,7 @@ public class ScreenshotConfigScreen extends Screen {
                                 : "better_screenshots.config.pixelated_previews.off"),
                         ScreenshotConfig.get().pixelatedPreviews)
                 .withValues(Boolean.FALSE, Boolean.TRUE)
-                .create(lx, ty + 14 + GAP * 6, COL_W, BTN_H,
+                .create(lx, ty + 14 + GAP * 7, COL_W, BTN_H,
                         Component.translatable("better_screenshots.config.pixelated_previews"),
                         (btn, val) -> {
                             ScreenshotConfig.get().pixelatedPreviews = val;
@@ -209,14 +222,14 @@ public class ScreenshotConfigScreen extends Screen {
         settingsWidgets.add(addRenderableWidget(Button.builder(
                         Component.translatable("better_screenshots.config.uploader.configure"),
                         btn -> dev.gdlev.better_screenshots.client.MinecraftCompat.setScreen(minecraft, new UploaderConfigScreen(this)))
-                .bounds(lx, ty + 14 + GAP * 7, COL_W, BTN_H)
+                .bounds(lx, ty + 14 + GAP * 8, COL_W, BTN_H)
                 .build()));
 
         settingsWidgets.add(addRenderableWidget(Button.builder(
                         Component.translatable("better_screenshots.config.actions.configure"),
                         btn -> dev.gdlev.better_screenshots.client.MinecraftCompat.setScreen(
                                 minecraft, new ActionButtonConfigScreen(this)))
-                .bounds(lx, ty + 14 + GAP * 8, COL_W, BTN_H)
+                .bounds(lx, ty + 14 + GAP * 9, COL_W, BTN_H)
                 .build()));
 
         // Back
@@ -281,6 +294,7 @@ public class ScreenshotConfigScreen extends Screen {
                 rx + COL_W / 2, ty + 2, 0xFF777777);
 
         int thumbsTopY = ty + 14 + screenshotsFirstRowTopMargin();
+        int hoveredActionButton = -1;
 
         // Action buttons reset
         Arrays.fill(actionBtnX, -100);
@@ -385,6 +399,7 @@ public class ScreenshotConfigScreen extends Screen {
                             && mouseX <= actionBtnX[b] + ACT_BTN_W
                             && mouseY >= actionBtnY[b]
                             && mouseY <= actionBtnY[b] + ACT_BTN_H;
+                    if (btnHov) hoveredActionButton = b;
 
                     context.blit(
                             RenderPipelines.GUI_TEXTURED,
@@ -428,6 +443,40 @@ public class ScreenshotConfigScreen extends Screen {
         // Fixed buttons
         if (doneBtn != null) doneBtn.extractRenderState(context, mouseX, mouseY, delta);
         if (galleryBtn != null) galleryBtn.extractRenderState(context, mouseX, mouseY, delta);
+        drawActionTooltip(context, mouseX, mouseY, hoveredActionButton, false);
+    }
+
+    private void drawActionTooltip(
+            GuiGraphicsExtractor context,
+            double mouseX,
+            double mouseY,
+            int action,
+            boolean closeFirst) {
+        if (action < 0 || !ScreenshotConfig.get().actionButtonTooltips) return;
+        Component text = actionTooltip(action, closeFirst);
+        int textW = font.width(text);
+        int x = Math.min((int) mouseX + 10, this.width - textW - 8);
+        int y = Math.min((int) mouseY + 10, this.height - 16);
+        x = Math.max(4, x);
+        y = Math.max(4, y);
+        context.fill(x - 3, y - 3, x + textW + 3, y + 11, 0xF0101010);
+        context.fill(x - 3, y - 3, x + textW + 3, y - 2, 0xFF555555);
+        context.fill(x - 3, y + 10, x + textW + 3, y + 11, 0xFF555555);
+        context.fill(x - 3, y - 3, x - 2, y + 11, 0xFF555555);
+        context.fill(x + textW + 2, y - 3, x + textW + 3, y + 11, 0xFF555555);
+        context.centeredText(font, text, x + textW / 2, y, 0xFFFFFFFF);
+    }
+
+    private Component actionTooltip(int action, boolean closeFirst) {
+        return Component.translatable(switch (action) {
+            case 0 -> closeFirst
+                    ? "better_screenshots.config.actions.action.close"
+                    : "better_screenshots.config.actions.action.show";
+            case 1 -> "better_screenshots.config.actions.action.copy";
+            case 2 -> "better_screenshots.config.actions.action.upload";
+            case 3 -> "better_screenshots.config.actions.action.delete";
+            default -> "better_screenshots.config.actions.configure";
+        });
     }
 
     @Override

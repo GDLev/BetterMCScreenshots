@@ -58,7 +58,9 @@ public class ScreenshotConfigData {
     public MenuButtonPosition menuButtonPosition = MenuButtonPosition.BOTTOM_LEFT;
     public boolean menuButtonPosition26_2DefaultMigrated = false;
     public int screenshotsFirstRowTopMargin = 0;
+    public boolean renderTopBar = true;
     public boolean hideMiniPreviewActionButtons = false;
+    public boolean actionButtonTooltips = true;
     public boolean pixelatedPreviews = false;
 
     public ActionButtonCorner miniPreviewShowCorner = ActionButtonCorner.TOP_RIGHT;

@@ -386,6 +386,9 @@ public class ScreenshotFullscreenScreen extends Screen {
             context.blit(hovered ? hoverIcons[i] : icons[i],
                     actionBtnX[i], actionBtnY[i], 0f, 0f,
                     ACT_BTN_W, ACT_BTN_H, ACT_BTN_W, ACT_BTN_H);
+            if (hovered) {
+                ActionButtonTooltips.draw(context, font, this.width, this.height, mouseX, mouseY, i, true);
+            }
         }
     }
 

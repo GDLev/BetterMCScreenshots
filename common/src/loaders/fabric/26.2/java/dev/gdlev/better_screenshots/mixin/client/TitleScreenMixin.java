@@ -4,6 +4,7 @@ import dev.gdlev.better_screenshots.client.ScreenshotGalleryScreen;
 import dev.gdlev.better_screenshots.client.MinecraftCompat;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.SpriteIconButton;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.Component;
@@ -35,15 +36,15 @@ public abstract class TitleScreenMixin extends Screen {
         if (y < 0) return;
 
         galleryButton = SpriteIconButton.builder(
-                        Component.translatable("better_screenshots.menu.gallery"),
+                        Component.literal("better_screenshots:title_gallery"),
                         b -> MinecraftCompat.setScreen(this.minecraft, new ScreenshotGalleryScreen(this)),
                         true)
                 .size(BTN_SIZE, BTN_SIZE)
                 .sprite(
                         Identifier.fromNamespaceAndPath("better_screenshots", "icon/gallery"),
                         ICON_SIZE, ICON_SIZE)
-                .withTootip()
                 .build();
+        galleryButton.setTooltip(Tooltip.create(Component.translatable("better_screenshots.menu.gallery")));
         galleryButton.setPosition(this.width, y);
 
         addRenderableWidget(galleryButton);

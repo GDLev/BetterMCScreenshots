@@ -6,6 +6,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.sounds.SoundEvents;
 
@@ -487,6 +488,7 @@ public class ScreenshotPreviewRenderer {
                         btnX[i], btnY[i], 0f, 0f,
                         BTN_W, BTN_H, BTN_W, BTN_H);
             }
+            drawActionTooltip(context, mouseX, mouseY, hoveredButton, false);
         } else {
             hoveredButton = -1;
             for (int i = 0; i < btnX.length; i++) {
@@ -539,6 +541,40 @@ public class ScreenshotPreviewRenderer {
                 context.fill(barX, barY, barX + barFillW, barY + uploadBarH, barColor);
             }
         }
+    }
+
+    private static void drawActionTooltip(
+            GuiGraphicsExtractor context,
+            double mouseX,
+            double mouseY,
+            int action,
+            boolean closeFirst) {
+        if (action < 0 || !ScreenshotConfig.get().actionButtonTooltips) return;
+        Minecraft mc = Minecraft.getInstance();
+        Component text = actionTooltip(action, closeFirst);
+        int textW = mc.font.width(text);
+        int x = Math.min((int) mouseX + 10, context.guiWidth() - textW - 8);
+        int y = Math.min((int) mouseY + 10, context.guiHeight() - 16);
+        x = Math.max(4, x);
+        y = Math.max(4, y);
+        context.fill(x - 3, y - 3, x + textW + 3, y + 11, 0xF0101010);
+        context.fill(x - 3, y - 3, x + textW + 3, y - 2, 0xFF555555);
+        context.fill(x - 3, y + 10, x + textW + 3, y + 11, 0xFF555555);
+        context.fill(x - 3, y - 3, x - 2, y + 11, 0xFF555555);
+        context.fill(x + textW + 2, y - 3, x + textW + 3, y + 11, 0xFF555555);
+        context.centeredText(mc.font, text, x + textW / 2, y, 0xFFFFFFFF);
+    }
+
+    private static Component actionTooltip(int action, boolean closeFirst) {
+        return Component.translatable(switch (action) {
+            case 0 -> closeFirst
+                    ? "better_screenshots.config.actions.action.close"
+                    : "better_screenshots.config.actions.action.show";
+            case 1 -> "better_screenshots.config.actions.action.copy";
+            case 2 -> "better_screenshots.config.actions.action.upload";
+            case 3 -> "better_screenshots.config.actions.action.delete";
+            default -> "better_screenshots.config.actions.configure";
+        });
     }
 
     public static boolean handleClick(double mouseX, double mouseY) {

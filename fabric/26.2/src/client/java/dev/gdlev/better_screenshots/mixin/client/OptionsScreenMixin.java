@@ -7,6 +7,7 @@ import dev.gdlev.better_screenshots.client.ScreenshotGalleryScreen;
 import dev.gdlev.better_screenshots.client.PauseMenuButtonLayout;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.components.SpriteIconButton;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.layouts.LayoutElement;
 import net.minecraft.client.gui.layouts.LinearLayout;
 import net.minecraft.client.gui.screens.PauseScreen;
@@ -80,29 +81,29 @@ public abstract class OptionsScreenMixin extends Screen {
     private void createModButtons() {
         if (settingsMenu != null && galleryButton != null && cameraButton != null) return;
         settingsMenu = SpriteIconButton.builder(
-                        Component.translatable("better_screenshots.menu.settings"),
+                        Component.literal("better_screenshots:pause_settings"),
                         b -> dev.gdlev.better_screenshots.client.MinecraftCompat.setScreen(this.minecraft, new ScreenshotConfigScreen(this)),
                         true)
                 .size(BTN_SIZE, BTN_SIZE)
                 .sprite(
                         Identifier.fromNamespaceAndPath("better_screenshots", "icon/settings"),
                         20, 20)
-                .withTootip()
                 .build();
+        settingsMenu.setTooltip(Tooltip.create(Component.translatable("better_screenshots.menu.settings")));
 
         galleryButton = SpriteIconButton.builder(
-                        Component.translatable("better_screenshots.menu.gallery"),
+                        Component.literal("better_screenshots:pause_gallery"),
                         b -> dev.gdlev.better_screenshots.client.MinecraftCompat.setScreen(this.minecraft, new ScreenshotGalleryScreen(this)),
                         true)
                 .size(BTN_SIZE, BTN_SIZE)
                 .sprite(
                         Identifier.fromNamespaceAndPath("better_screenshots", "icon/gallery"),
                         ICON_SIZE, ICON_SIZE)
-                .withTootip()
                 .build();
+        galleryButton.setTooltip(Tooltip.create(Component.translatable("better_screenshots.menu.gallery")));
 
         cameraButton = SpriteIconButton.builder(
-                        Component.translatable("better_screenshots.menu.screenshot"),
+                        Component.literal("better_screenshots:pause_screenshot"),
                         b -> {
                             dev.gdlev.better_screenshots.client.MinecraftCompat.setScreen(this.minecraft, null);
 
@@ -131,8 +132,8 @@ public abstract class OptionsScreenMixin extends Screen {
                 .sprite(
                         Identifier.fromNamespaceAndPath("better_screenshots", "icon/camera"),
                         ICON_SIZE, ICON_SIZE)
-                .withTootip()
                 .build();
+        cameraButton.setTooltip(Tooltip.create(Component.translatable("better_screenshots.menu.screenshot")));
     }
 
     @Unique

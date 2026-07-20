@@ -1,9 +1,10 @@
 # Better MC Screenshots - Configuration (`better_screenshots.json`)
 
-This document describes the full JSON config file, default values, and what each option does.
+This document describes the JSON config file, default values, and what each option does.
 
 Config file location:
 - Fabric: `config/better_screenshots.json`
+- Forge: `config/better_screenshots.json`
 - NeoForge: `config/better_screenshots.json`
 
 Default config:
@@ -18,8 +19,80 @@ Default config:
   "flashMode": "PREVIEW",
   "previewDurationSeconds": 4,
   "menuButtonPosition": "BOTTOM_LEFT",
+  "menuButtonPosition26_2DefaultMigrated": false,
   "screenshotsFirstRowTopMargin": 0,
+  "renderTopBar": true,
   "hideMiniPreviewActionButtons": false,
+  "actionButtonTooltips": true,
+  "pixelatedPreviews": false,
+  "miniPreviewShowCorner": "TOP_RIGHT",
+  "miniPreviewCopyCorner": "TOP_RIGHT",
+  "miniPreviewUploadCorner": "TOP_RIGHT",
+  "miniPreviewDeleteCorner": "TOP_RIGHT",
+  "miniPreviewShowVisible": true,
+  "miniPreviewCopyVisible": true,
+  "miniPreviewUploadVisible": true,
+  "miniPreviewDeleteVisible": true,
+  "miniPreviewShowOrder": 0,
+  "miniPreviewCopyOrder": 1,
+  "miniPreviewUploadOrder": 2,
+  "miniPreviewDeleteOrder": 3,
+  "galleryShowCorner": "TOP_RIGHT",
+  "galleryCopyCorner": "TOP_RIGHT",
+  "galleryUploadCorner": "TOP_RIGHT",
+  "galleryDeleteCorner": "TOP_RIGHT",
+  "galleryShowVisible": true,
+  "galleryCopyVisible": true,
+  "galleryUploadVisible": true,
+  "galleryDeleteVisible": true,
+  "galleryShowOrder": 0,
+  "galleryCopyOrder": 1,
+  "galleryUploadOrder": 2,
+  "galleryDeleteOrder": 3,
+  "configMenuShowCorner": "TOP_RIGHT",
+  "configMenuCopyCorner": "TOP_RIGHT",
+  "configMenuUploadCorner": "TOP_RIGHT",
+  "configMenuDeleteCorner": "TOP_RIGHT",
+  "configMenuShowVisible": true,
+  "configMenuCopyVisible": true,
+  "configMenuUploadVisible": true,
+  "configMenuDeleteVisible": true,
+  "configMenuShowOrder": 0,
+  "configMenuCopyOrder": 1,
+  "configMenuUploadOrder": 2,
+  "configMenuDeleteOrder": 3,
+  "fullscreenCloseCorner": "TOP_LEFT",
+  "fullscreenCopyCorner": "TOP_RIGHT",
+  "fullscreenUploadCorner": "TOP_RIGHT",
+  "fullscreenDeleteCorner": "TOP_RIGHT",
+  "fullscreenCloseVisible": true,
+  "fullscreenCopyVisible": true,
+  "fullscreenUploadVisible": true,
+  "fullscreenDeleteVisible": true,
+  "fullscreenCloseOrder": 0,
+  "fullscreenCopyOrder": 1,
+  "fullscreenUploadOrder": 2,
+  "fullscreenDeleteOrder": 3,
+  "pauseButtonLayoutMigrated": false,
+  "pauseSettingsAnchor": "CENTER",
+  "pauseGalleryAnchor": "CENTER",
+  "pauseScreenshotAnchor": "CENTER",
+  "pauseSettingsVisible": true,
+  "pauseGalleryVisible": true,
+  "pauseScreenshotVisible": true,
+  "pauseSettingsOrder": 0,
+  "pauseGalleryOrder": 1,
+  "pauseScreenshotOrder": 2,
+  "pause26_1ButtonLayoutMigrated": false,
+  "pause26_1SettingsCorner": "BOTTOM_LEFT",
+  "pause26_1GalleryCorner": "BOTTOM_LEFT",
+  "pause26_1ScreenshotCorner": "BOTTOM_LEFT",
+  "pause26_1SettingsVisible": true,
+  "pause26_1GalleryVisible": true,
+  "pause26_1ScreenshotVisible": true,
+  "pause26_1SettingsOrder": 0,
+  "pause26_1GalleryOrder": 1,
+  "pause26_1ScreenshotOrder": 2,
   "uploadProvider": "DISABLED",
   "uploadAutoUpload": false,
   "uploadChatNotification": true,
@@ -55,21 +128,89 @@ Default config:
   - Allowed: `ON`, `OFF`, `REDUCED`
   - `ON`: full animations.
   - `OFF`: no preview/fullscreen animations.
-  - `REDUCED`: reduced animations (preview-level behavior is still partially animated).
+  - `REDUCED`: reduced animations.
 - `chatNotification`: Style for screenshot chat messages.
   - Allowed: `MODERN`, `DEFAULT`, `DISABLED`
 - `flashMode`: Visual flash effect mode when taking/copying screenshots.
   - Allowed: `PREVIEW`, `SCREEN`
 - `previewDurationSeconds`: How long mini preview stays visible.
   - Integer seconds.
-- `menuButtonPosition`: Position of the gallery/config entry button in menus.
-  - Allowed: `TOP_RIGHT`, `TOP_LEFT`, `BOTTOM_RIGHT`, `BOTTOM_LEFT`, `DISABLED`
+- `menuButtonPosition`: Position of the gallery/config entry buttons in game menus.
+  - Allowed: `CENTER`, `TOP_RIGHT`, `TOP_LEFT`, `BOTTOM_RIGHT`, `BOTTOM_LEFT`, `DISABLED`
+  - `CENTER` is used for Minecraft 26.2-style menu button rows.
 - `screenshotsFirstRowTopMargin`: Extra top margin only for the first row of screenshots in gallery/config grids.
   - Intended for modpack/custom menu layouts.
   - Useful when custom widgets overlap the first row.
+- `renderTopBar`: Whether the gallery renders its top bar/container behind Back, Sort, and Folder controls.
+  - File-only advanced option.
+  - Set to `false` when another menu mod provides its own header/background.
 - `hideMiniPreviewActionButtons`: Hides mini-preview action buttons and disables their click actions.
   - File-only advanced option for pack makers/custom UIs.
-  - Default: `false`
+- `actionButtonTooltips`: Shows tooltips for action buttons.
+- `pixelatedPreviews`: Controls preview scaling style in gallery/config thumbnails.
+  - `false`: smoother thumbnails.
+  - `true`: pixelated thumbnails.
+
+## Gallery behavior
+
+- The gallery sort button cycles through newest first, oldest first, A-Z, and Z-A.
+- The Folder button opens Minecraft's `screenshots` directory.
+- Screenshot names can be edited from the gallery by using the edit icon next to the timestamp/name.
+  - Enter accepts the new file name.
+  - Escape cancels editing.
+  - The file is renamed on disk.
+  - If a target name already exists, a numeric suffix is added.
+
+## Action button layout fields
+
+Action buttons use three related values:
+- `*Corner`: The corner where an action button appears.
+- `*Visible`: Whether that action button is enabled in that surface.
+- `*Order`: Ordering inside the same corner. Lower values are placed first from the corner toward the center.
+
+Allowed values for `*Corner`:
+- `TOP_LEFT`
+- `TOP_RIGHT`
+- `BOTTOM_LEFT`
+- `BOTTOM_RIGHT`
+
+The configured action names are:
+- `Show`: opens fullscreen preview.
+- `Copy`: copies the screenshot.
+- `Upload`: uploads the screenshot when an uploader is configured.
+- `Delete`: deletes the screenshot.
+- `Close`: closes fullscreen preview.
+
+Surface prefixes:
+- `miniPreview*`: action buttons shown on the small screenshot preview.
+- `gallery*`: action buttons shown on screenshot thumbnails in the gallery.
+- `configMenu*`: action buttons shown on thumbnails inside the configuration screen.
+- `fullscreen*`: action buttons shown in fullscreen preview.
+
+For the configuration screen preview, only the top-left and top-right corners are used visually.
+
+## Pause menu button layout fields
+
+Minecraft 26.2-style pause menus support center-row and corner placement:
+- `pauseSettingsAnchor`
+- `pauseGalleryAnchor`
+- `pauseScreenshotAnchor`
+
+Allowed values:
+- `CENTER`
+- `TOP_LEFT`
+- `TOP_RIGHT`
+- `BOTTOM_LEFT`
+- `BOTTOM_RIGHT`
+
+Each pause menu button also has:
+- `pauseSettingsVisible`, `pauseGalleryVisible`, `pauseScreenshotVisible`
+- `pauseSettingsOrder`, `pauseGalleryOrder`, `pauseScreenshotOrder`
+
+Older menu layouts use the `pause26_1*` fields:
+- `pause26_1SettingsCorner`, `pause26_1GalleryCorner`, `pause26_1ScreenshotCorner`
+- `pause26_1SettingsVisible`, `pause26_1GalleryVisible`, `pause26_1ScreenshotVisible`
+- `pause26_1SettingsOrder`, `pause26_1GalleryOrder`, `pause26_1ScreenshotOrder`
 
 ## Uploader options
 
@@ -84,11 +225,11 @@ Default config:
 ## Imgur provider
 
 - `imgurClientId`: Imgur API Client ID.
-- `imgurAccessToken`: Optional OAuth access token (depends on workflow/provider usage).
+- `imgurAccessToken`: Optional OAuth access token.
 
 ## S3 provider
 
-- `s3Endpoint`: S3-compatible endpoint URL (AWS S3 or compatible providers).
+- `s3Endpoint`: S3-compatible endpoint URL.
 - `s3Region`: Bucket region.
 - `s3Bucket`: Bucket name.
 - `s3AccessKey`: Access key ID.
@@ -112,8 +253,10 @@ Default config:
 ## Runtime normalization and migration behavior
 
 - If `animationsMode` is missing, it is derived from legacy `animations`.
-- Legacy `animations` is then synchronized from `animationsMode`.
-- If `menuButtonPosition` is missing, it defaults to `BOTTOM_LEFT`.
+- Legacy `animations` is synchronized from `animationsMode`.
+- If `menuButtonPosition` is missing, it defaults to `CENTER` on Minecraft 26.2 and to `BOTTOM_LEFT` on older versions.
+- On Minecraft 26.2, an unmigrated `BOTTOM_LEFT` menu button position is migrated to `CENTER`.
+- On older Minecraft versions, `CENTER` is normalized back to `BOTTOM_LEFT`.
 - If `uploadProvider` is missing, it defaults to `DISABLED`.
 - If `customUploadMethod` is missing, it defaults to `POST`.
 - Null upload strings are normalized to empty strings.
@@ -122,5 +265,7 @@ Default config:
 ## Notes for pack makers
 
 - `screenshotsFirstRowTopMargin` is intentionally file-only advanced tuning.
-- `hideMiniPreviewActionButtons` is also file-only advanced tuning.
+- `renderTopBar` is also file-only and is useful for FancyMenu/custom gallery headers.
+- `hideMiniPreviewActionButtons` is file-only advanced tuning.
+- The `*Migrated` fields are internal migration flags. They should normally be left alone.
 - You can ship preconfigured uploader settings in modpacks, but warn users about privacy/security implications of automatic online sharing.

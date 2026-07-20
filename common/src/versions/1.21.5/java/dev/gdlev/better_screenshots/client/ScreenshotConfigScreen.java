@@ -122,6 +122,19 @@ public class ScreenshotConfigScreen extends Screen {
         // Settings
 
         settingsWidgets.add(addRenderableWidget(CycleButton.builder(
+                        (Boolean enabled) -> Component.translatable(enabled
+                                ? "better_screenshots.config.action_tooltips.on"
+                                : "better_screenshots.config.action_tooltips.off"))
+                .withValues(Boolean.TRUE, Boolean.FALSE)
+                .withInitialValue(ScreenshotConfig.get().actionButtonTooltips)
+                .create(lx, ty + 14, COL_W, BTN_H,
+                        Component.translatable("better_screenshots.config.action_tooltips"),
+                        (btn, val) -> {
+                            ScreenshotConfig.get().actionButtonTooltips = val;
+                            ScreenshotConfig.save();
+                        })));
+
+        settingsWidgets.add(addRenderableWidget(CycleButton.builder(
                         (ScreenshotConfig.Corner c) -> Component.translatable(switch (c) {
                             case BOTTOM_RIGHT -> "better_screenshots.config.corner.bottom_right";
                             case BOTTOM_LEFT  -> "better_screenshots.config.corner.bottom_left";
@@ -278,6 +291,7 @@ public class ScreenshotConfigScreen extends Screen {
                 rx + COL_W / 2, ty + 2, 0xFF777777);
 
         int thumbsTopY = ty + 14 + screenshotsFirstRowTopMargin();
+        int hoveredActionButton = -1;
 
         // Action buttons reset
         Arrays.fill(actionBtnX, -100);
@@ -382,6 +396,7 @@ public class ScreenshotConfigScreen extends Screen {
                             && mouseX <= actionBtnX[b] + ACT_BTN_W
                             && mouseY >= actionBtnY[b]
                             && mouseY <= actionBtnY[b] + ACT_BTN_H;
+                    if (btnHov) hoveredActionButton = b;
 
                     context.blit(
                             RenderType::guiTextured,
@@ -425,6 +440,7 @@ public class ScreenshotConfigScreen extends Screen {
         // Fixed buttons
         if (doneBtn != null) doneBtn.render(context, mouseX, mouseY, delta);
         if (galleryBtn != null) galleryBtn.render(context, mouseX, mouseY, delta);
+        ActionButtonTooltips.draw(context, font, this.width, this.height, mouseX, mouseY, hoveredActionButton, false);
     }
 
     @Override

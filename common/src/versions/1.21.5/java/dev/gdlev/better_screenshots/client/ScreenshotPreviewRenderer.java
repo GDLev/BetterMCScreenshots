@@ -525,6 +525,7 @@ public class ScreenshotPreviewRenderer {
                     btnX[i], btnY[i], 0f, 0f,
                     BTN_W, BTN_H, BTN_W, BTN_H);
         }
+        ActionButtonTooltips.draw(context, mc.font, context.guiWidth(), context.guiHeight(), mouseX, mouseY, hoveredButton, false);
         } else {
             hoveredButton = -1;
             for (int i = 0; i < btnX.length; i++) {

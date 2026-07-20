@@ -12,6 +12,7 @@ import java.util.*;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
@@ -19,6 +20,7 @@ import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.Util;
 
 public class ScreenshotGalleryScreen extends Screen {
 
@@ -32,14 +34,19 @@ public class ScreenshotGalleryScreen extends Screen {
     private static final int TOP_PAD    = 30;
     private static final int BOTTOM_PAD = 8;
     private static final int SORT_W     = 126;
+    private static final int FOLDER_W   = 58;
     private static final int SORT_H     = 18;
     private static final int CONTROLS_Y = 4;
+    private static final int EDIT_ICON_W = 10;
+    private static final int NAME_MAX_LENGTH = 80;
 
     private final List<File>                     files         = new ArrayList<>();
     private final List<ResourceLocation>               thumbIds      = new ArrayList<>();
     private final List<DynamicTexture> thumbTextures = new ArrayList<>();
 
     private int   scrollOffset   = 0;
+    private int   preservedScrollOffset = 0;
+    private boolean preserveScrollOnReload = false;
     private int   totalContentH  = 0;
     private int   selectedIdx    = -1;
 
@@ -73,10 +80,16 @@ public class ScreenshotGalleryScreen extends Screen {
     private SortMode sortMode = SortMode.NEWEST_FIRST;
     private Button backButton;
     private Button sortButton;
+    private Button folderButton;
+    private int hoveredActionButton = -1;
+    private EditBox nameEditBox;
+    private int editingNameIdx = -1;
 
     private enum SortMode {
         NEWEST_FIRST("better_screenshots.gallery.sort.newest"),
-        OLDEST_FIRST("better_screenshots.gallery.sort.oldest");
+        OLDEST_FIRST("better_screenshots.gallery.sort.oldest"),
+        NAME_A_Z("better_screenshots.gallery.sort.az"),
+        NAME_Z_A("better_screenshots.gallery.sort.za");
 
         private final String translationKey;
 
@@ -117,6 +130,7 @@ public class ScreenshotGalleryScreen extends Screen {
         } else if (files.isEmpty() && thumbIds.isEmpty()) {
             loadScreenshots();
         }
+        restorePreservedScroll();
     }
 
     private static final int MAX_CONCURRENT_LOADS = 4;
@@ -128,7 +142,9 @@ public class ScreenshotGalleryScreen extends Screen {
         thumbTextures.clear();
         thumbIds.clear();
         files.clear();
+        int scrollToRestore = preserveScrollOnReload ? preservedScrollOffset : 0;
         selectedIdx  = -1;
+        cancelNameEdit();
         scrollOffset = 0;
         thumbUploadStates.clear();
 
@@ -164,6 +180,10 @@ public class ScreenshotGalleryScreen extends Screen {
         }
 
         recalcContentH();
+        if (preserveScrollOnReload) {
+            scrollOffset = scrollToRestore;
+            clampScroll();
+        }
         refreshActionButtons();
     }
 
@@ -171,6 +191,8 @@ public class ScreenshotGalleryScreen extends Screen {
         Comparator<File> comparator = switch (sortMode) {
             case NEWEST_FIRST -> Comparator.comparingLong(File::lastModified).reversed();
             case OLDEST_FIRST -> Comparator.comparingLong(File::lastModified);
+            case NAME_A_Z -> Comparator.comparing(file -> file.getName().toLowerCase(Locale.ROOT));
+            case NAME_Z_A -> Comparator.comparing((File file) -> file.getName().toLowerCase(Locale.ROOT)).reversed();
         };
         files.sort(comparator);
     }
@@ -360,10 +382,28 @@ public class ScreenshotGalleryScreen extends Screen {
         scrollOffset = Math.max(0, Math.min(scrollOffset, maxScroll));
     }
 
+    private void preserveCurrentScroll() {
+        preservedScrollOffset = scrollOffset;
+        preserveScrollOnReload = true;
+    }
+
+    private void restorePreservedScroll() {
+        if (!preserveScrollOnReload) return;
+        scrollOffset = preservedScrollOffset;
+        clampScroll();
+    }
+
+    private void rememberScrollIfPreserving() {
+        if (preserveScrollOnReload) {
+            preservedScrollOffset = scrollOffset;
+        }
+    }
+
     @Override
     public void resize(Minecraft minecraft, int width, int height) {
         super.resize(minecraft, width, height);
         recalcContentH();
+        restorePreservedScroll();
     }
 
     // Click handling
@@ -371,6 +411,10 @@ public class ScreenshotGalleryScreen extends Screen {
     public boolean handleClick(int button, double mouseX, double mouseY) {
         if (button != 0) return false;
         int topPad = screenshotsTopPad();
+
+        if (isClickInsideNameEditor(mouseX, mouseY)) {
+            return false;
+        }
 
         // Scrollbar dragging (when content is taller than viewport)
         int bottomY  = gridBottomY();
@@ -437,6 +481,10 @@ public class ScreenshotGalleryScreen extends Screen {
             if (mouseX >= x && mouseX <= x + thumbW
                     && mouseY >= y && mouseY <= y + tileH
                     && mouseY >= topPad && mouseY <= bottomY) {
+                if (isEditIconHit(mouseX, mouseY, x, y + thumbH(), thumbW)) {
+                    startNameEdit(i);
+                    return true;
+                }
                 long now = System.currentTimeMillis();
                 if (lastClickedThumbIdx == i
                         && lastThumbClickMs > 0
@@ -471,6 +519,24 @@ public class ScreenshotGalleryScreen extends Screen {
     }
 
     @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (editingNameIdx >= 0 && nameEditBox != null) {
+            if (keyCode == 256) {
+                cancelNameEdit();
+                return true;
+            }
+            if (keyCode == 257 || keyCode == 335) {
+                acceptNameEdit();
+                return true;
+            }
+            if (nameEditBox.keyPressed(keyCode, scanCode, modifiers)) {
+                return true;
+            }
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dx, double dy) {
         int topPad = screenshotsTopPad();
         if (button == 0 && draggingScrollbar) {
@@ -494,20 +560,28 @@ public class ScreenshotGalleryScreen extends Screen {
     }
 
     private void updateScrollFromThumb(double thumbTopY, int thumbH, int visibleH, int maxScroll) {
-        if (maxScroll <= 0) { scrollOffset = 0; return; }
+        if (maxScroll <= 0) {
+            scrollOffset = 0;
+            rememberScrollIfPreserving();
+            return;
+        }
         int topPad = screenshotsTopPad();
         int travel = Math.max(1, visibleH - thumbH);
         double clamped = Math.max(topPad, Math.min(topPad + travel, thumbTopY));
         double ratio = (clamped - topPad) / travel;
         scrollOffset = (int) Math.round(ratio * maxScroll);
+        rememberScrollIfPreserving();
     }
 
     // Render
 
     @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
+        restorePreservedScroll();
         int topPad = screenshotsTopPad();
         context.fill(0, 0, this.width, this.height, 0xFF111111);
+        hoveredActionButton = -1;
+        updateNameEditBoxBounds();
 
         drawTopBar(context);
 
@@ -568,7 +642,7 @@ public class ScreenshotGalleryScreen extends Screen {
                 renderUploadOverlay(context, x, y, thumbW, thumbH, files.get(i));
             }
 
-            drawTimestampBar(context, files.get(i), x, y + thumbH, thumbW);
+            drawTimestampBar(context, files.get(i), i, x, y + thumbH, thumbW, mouseX, mouseY);
         }
 
         context.disableScissor();
@@ -592,6 +666,8 @@ public class ScreenshotGalleryScreen extends Screen {
         super.render(context, mouseX, mouseY, delta);
         drawTopBar(context);
         extractTopControls(context, mouseX, mouseY, delta);
+        ActionButtonTooltips.draw(context, font, this.width, this.height, mouseX, mouseY, hoveredActionButton, false);
+
     }
 
     private void drawSelectedPanel(GuiGraphics context) {
@@ -654,6 +730,7 @@ public class ScreenshotGalleryScreen extends Screen {
                         && mouseX <= actionBtnX[i] + ACT_BTN_W
                         && mouseY >= actionBtnY[i]
                         && mouseY <= actionBtnY[i] + ACT_BTN_H;
+                if (hov) hoveredActionButton = i;
 
                 context.blit(
                         RenderPipelines.GUI_TEXTURED,
@@ -671,6 +748,7 @@ public class ScreenshotGalleryScreen extends Screen {
     }
 
     private void drawTopBar(GuiGraphics context) {
+        if (!ScreenshotConfig.get().renderTopBar) return;
         context.fill(0, 0, this.width, TOP_PAD - 4, 0xFF181818);
         context.fill(0, TOP_PAD - 4, this.width, TOP_PAD - 3, 0xFF2F2F2F);
         context.fill(0, TOP_PAD - 3, this.width, TOP_PAD - 2, 0x66000000);
@@ -679,10 +757,12 @@ public class ScreenshotGalleryScreen extends Screen {
     private void extractTopControls(GuiGraphics context, int mouseX, int mouseY, float delta) {
         if (backButton != null) backButton.render(context, mouseX, mouseY, delta);
         if (sortButton != null) sortButton.render(context, mouseX, mouseY, delta);
+        if (folderButton != null) folderButton.render(context, mouseX, mouseY, delta);
     }
 
 
     private void openFullscreen(int idx) {
+        preserveCurrentScroll();
         Minecraft mc = Minecraft.getInstance();
         ScreenshotFullscreenScreen screen = new ScreenshotFullscreenScreen(this);
         // Provide the full file list so the fullscreen screen can navigate prev/next
@@ -703,7 +783,11 @@ public class ScreenshotGalleryScreen extends Screen {
     }
 
     private void refreshActionButtons() {
-        rebuildControls();
+        if (backButton == null || sortButton == null || folderButton == null) {
+            rebuildControls();
+            return;
+        }
+        sortButton.setMessage(Component.translatable(sortMode.translationKey));
     }
 
     private void rebuildControls() {
@@ -717,12 +801,201 @@ public class ScreenshotGalleryScreen extends Screen {
                         Component.translatable(sortMode.translationKey),
                         btn -> {
                             sortMode = sortMode.next();
+                            preserveScrollOnReload = false;
                             loadScreenshots();
                         })
                 .bounds(GRID_PAD_X + 66, CONTROLS_Y, SORT_W, SORT_H)
                 .build();
+        folderButton = Button.builder(
+                        Component.translatable("better_screenshots.gallery.open_folder"),
+                        btn -> openScreenshotsFolder())
+                .bounds(this.width - GRID_PAD_X - FOLDER_W, CONTROLS_Y, FOLDER_W, SORT_H)
+                .build();
+        nameEditBox = new EditBox(font, 0, 0, 1, META_H - 2,
+                Component.translatable("better_screenshots.gallery.name"));
+        nameEditBox.setMaxLength(NAME_MAX_LENGTH);
+        nameEditBox.setBordered(false);
+        nameEditBox.setTextColor(0xFFE0E0E0);
+        nameEditBox.setSuggestion("...");
+        nameEditBox.setVisible(false);
         addRenderableWidget(backButton);
         addRenderableWidget(sortButton);
+        addRenderableWidget(folderButton);
+        addRenderableWidget(nameEditBox);
+    }
+
+    private void openScreenshotsFolder() {
+        File dir = new File(Minecraft.getInstance().gameDirectory, "screenshots");
+        if (!dir.exists()) dir.mkdirs();
+        Util.getPlatform().openFile(dir);
+    }
+
+
+    private void startNameEdit(int idx) {
+        if (idx < 0 || idx >= files.size()) return;
+        editingNameIdx = idx;
+        if (nameEditBox == null) return;
+        nameEditBox.setValue("");
+        nameEditBox.setFocused(true);
+        nameEditBox.setCanLoseFocus(false);
+        nameEditBox.moveCursorToEnd(false);
+        this.setFocused(nameEditBox);
+        updateNameEditBoxBounds();
+    }
+
+    private void acceptNameEdit() {
+        if (editingNameIdx < 0 || editingNameIdx >= files.size() || nameEditBox == null) {
+            cancelNameEdit();
+            return;
+        }
+
+        String value = nameEditBox.getValue().trim();
+        if (value.isEmpty()) {
+            cancelNameEdit();
+            return;
+        }
+
+        renameScreenshot(editingNameIdx, value);
+        cancelNameEdit();
+    }
+
+    private void renameScreenshot(int idx, String requestedName) {
+        if (idx < 0 || idx >= files.size()) return;
+
+        File source = files.get(idx);
+        File parentDir = source.getParentFile();
+        if (parentDir == null) return;
+
+        String baseName = sanitizeScreenshotName(requestedName);
+        if (baseName.isEmpty()) return;
+
+        File target = uniqueScreenshotFile(parentDir, baseName, source);
+        if (source.equals(target)) return;
+
+        String oldUploadKey = uploadKey(source);
+        try {
+            Files.move(source.toPath(), target.toPath());
+        } catch (Exception ignored) {
+            return;
+        }
+
+        files.set(idx, target);
+
+        ThumbUploadOverlay overlay = thumbUploadStates.remove(oldUploadKey);
+        if (overlay != null) {
+            thumbUploadStates.put(uploadKey(target), overlay);
+        }
+    }
+
+    private String sanitizeScreenshotName(String name) {
+        String sanitized = name.trim()
+                .replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_")
+                .replaceAll("\\s+", " ");
+        while (sanitized.endsWith(".") || sanitized.endsWith(" ")) {
+            sanitized = sanitized.substring(0, sanitized.length() - 1);
+        }
+        if (sanitized.toLowerCase(Locale.ROOT).endsWith(".png")) {
+            sanitized = sanitized.substring(0, sanitized.length() - 4).trim();
+        }
+        if (sanitized.length() > NAME_MAX_LENGTH) {
+            sanitized = sanitized.substring(0, NAME_MAX_LENGTH).trim();
+        }
+        return sanitized;
+    }
+
+    private File uniqueScreenshotFile(File dir, String baseName, File source) {
+        File target = new File(dir, baseName + ".png");
+        if (target.equals(source) || !target.exists()) {
+            return target;
+        }
+
+        for (int i = 2; i < 1000; i++) {
+            target = new File(dir, baseName + " (" + i + ").png");
+            if (target.equals(source) || !target.exists()) {
+                return target;
+            }
+        }
+        return new File(dir, baseName + " (" + System.currentTimeMillis() + ").png");
+    }
+
+    private String displayName(File file) {
+        String fileName = file.getName();
+        if (isDefaultScreenshotName(fileName)) {
+            return null;
+        }
+        if (fileName.toLowerCase(Locale.ROOT).endsWith(".png")) {
+            return fileName.substring(0, fileName.length() - 4);
+        } else {
+            return fileName;
+        }
+    }
+
+    private boolean isDefaultScreenshotName(String fileName) {
+        return fileName.matches("\\d{4}-\\d{2}-\\d{2}_\\d{2}\\.\\d{2}\\.\\d{2}(?:_\\d+)?\\.png");
+    }
+
+    private void cancelNameEdit() {
+        editingNameIdx = -1;
+        if (nameEditBox != null) {
+            nameEditBox.setValue("");
+            nameEditBox.setFocused(false);
+            nameEditBox.setCanLoseFocus(true);
+            nameEditBox.setVisible(false);
+        }
+        if (this.getFocused() == nameEditBox) {
+            this.setFocused(null);
+        }
+    }
+
+    private boolean isClickInsideNameEditor(double mouseX, double mouseY) {
+        return editingNameIdx >= 0
+                && nameEditBox != null
+                && nameEditBox.isVisible()
+                && mouseX >= nameEditBox.getX()
+                && mouseX <= nameEditBox.getX() + nameEditBox.getWidth()
+                && mouseY >= nameEditBox.getY()
+                && mouseY <= nameEditBox.getY() + nameEditBox.getHeight();
+    }
+
+    private boolean updateNameEditBoxBounds() {
+        if (nameEditBox == null || editingNameIdx < 0 || editingNameIdx >= files.size()) {
+            if (nameEditBox != null) nameEditBox.setVisible(false);
+            return false;
+        }
+
+        int topPad = screenshotsTopPad();
+        int cols = cols();
+        int thumbW = thumbW();
+        int thumbH = thumbH();
+        int tileH = tileH();
+        int col = editingNameIdx % cols;
+        int row = editingNameIdx / cols;
+        int x = gridStartX() + col * (thumbW + THUMB_GAP);
+        int y = topPad + row * (tileH + THUMB_GAP) - scrollOffset + thumbH;
+        boolean visible = y >= topPad && y + META_H <= gridBottomY();
+
+        nameEditBox.setVisible(visible);
+        if (!visible) return false;
+
+        nameEditBox.setX(x + 4);
+        nameEditBox.setY(y + 3);
+        nameEditBox.setWidth(Math.max(1, thumbW - EDIT_ICON_W - 8));
+        nameEditBox.setHeight(META_H - 4);
+        return true;
+    }
+
+    private boolean isEditIconHit(double mouseX, double mouseY, int x, int metaY, int width) {
+        int iconX = x + width - EDIT_ICON_W - 3;
+        return mouseX >= iconX
+                && mouseX <= iconX + EDIT_ICON_W
+                && mouseY >= metaY + 1
+                && mouseY <= metaY + META_H - 1;
+    }
+
+    private void renderNameEditBox(GuiGraphics context, int mouseX, int mouseY, float delta) {
+        if (nameEditBox != null && nameEditBox.isVisible()) {
+            nameEditBox.render(context, mouseX, mouseY, delta);
+        }
     }
 
     private void copyFile(int idx) {
@@ -784,6 +1057,7 @@ public class ScreenshotGalleryScreen extends Screen {
         int maxScroll = Math.max(0, totalContentH - visibleH);
         scrollOffset  = Math.max(0, Math.min(
                 scrollOffset - (int)(vAmount * 20), maxScroll));
+        rememberScrollIfPreserving();
         return true;
     }
 
@@ -878,20 +1152,35 @@ public class ScreenshotGalleryScreen extends Screen {
         context.fill(barX, barY, barX + fillW, barY + UPLOAD_BAR_H, color);
     }
 
-    private void drawTimestampBar(GuiGraphics context, File file, int x, int y, int width) {
+    private void drawTimestampBar(
+            GuiGraphics context,
+            File file,
+            int idx,
+            int x,
+            int y,
+            int width,
+            int mouseX,
+            int mouseY) {
         context.fill(x, y, x + width, y + META_H, 0xFF3A3A3A);
         context.fill(x, y, x + width, y + 1, 0xFF505050);
 
-        String label = formatScreenshotTime(file.lastModified());
-        if (font.width(label) > width - 8) {
+        boolean editing = idx == editingNameIdx && nameEditBox != null && nameEditBox.isVisible();
+        String customName = displayName(file);
+        String label = customName != null ? customName : formatScreenshotTime(file.lastModified());
+        int labelW = width - EDIT_ICON_W - 10;
+        if (font.width(label) > labelW) {
             String clipped = label;
-            while (font.width(clipped + "…") > width - 8 && !clipped.isEmpty()) {
+            while (font.width(clipped + "…") > labelW && !clipped.isEmpty()) {
                 clipped = clipped.substring(0, clipped.length() - 1);
             }
             label = clipped + "…";
         }
 
-        context.drawString(font, Component.literal(label), x + 4, y + 4, 0xFFE0E0E0);
+        if (!editing) {
+            context.drawString(font, Component.literal(label), x + 4, y + 4, 0xFFE0E0E0);
+        }
+        int iconColor = isEditIconHit(mouseX, mouseY, x, y, width) ? 0xFFFFFFFF : 0xFFBDBDBD;
+        context.drawString(font, Component.literal("✎"), x + width - EDIT_ICON_W - 1, y + 3, iconColor);
     }
 
     private static String formatScreenshotTime(long lastModified) {

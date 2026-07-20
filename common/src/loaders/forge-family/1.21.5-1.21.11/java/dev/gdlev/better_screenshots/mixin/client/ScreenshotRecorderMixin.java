@@ -138,8 +138,8 @@ public class ScreenshotRecorderMixin {
             client.execute(() -> {
                 if (cfg.shutterSound == ScreenshotConfig.ShutterSound.NONE) return;
                 net.minecraft.sounds.SoundEvent sound = switch (cfg.shutterSound) {
-                    case SOFT    -> Better_screenshots.SHUTTER_SOFT.get();
-                    case CLASSIC -> Better_screenshots.SHUTTER_CLASSIC.get();
+                    case SOFT    -> Better_screenshots.SHUTTER_SOFT;
+                    case CLASSIC -> Better_screenshots.SHUTTER_CLASSIC;
                     default      -> null;
                 };
                 if (sound != null)

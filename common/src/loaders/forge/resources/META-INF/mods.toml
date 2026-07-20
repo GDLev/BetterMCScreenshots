@@ -8,7 +8,7 @@ modId="${mod_id}"
 version="${mod_version}"
 displayName="${mod_name}"
 authors="GDLev"
-displayTest="IGNORE_SERVER_VERSION"
+displayTest="IGNORE_ALL_VERSION"
 description='''
 Enhance your screenshots with previews, sounds, and an in-game gallery!
 '''
