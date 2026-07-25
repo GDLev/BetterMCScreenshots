@@ -3,16 +3,23 @@ package dev.gdlev.better_screenshots.mixin.client;
 import dev.gdlev.better_screenshots.client.ScreenshotFullscreenScreen;
 import dev.gdlev.better_screenshots.client.ScreenshotPreviewRenderer;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Style;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(Screen.class)
 public class ScreenMixin {
+    @Inject(method = "render", at = @At("RETURN"))
+    private void renderPreviewAboveScreen(GuiGraphics context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+        ScreenshotPreviewRenderer.renderAboveScreens(context);
+    }
+
     @Inject(method = "handleComponentClicked", at = @At("HEAD"), cancellable = true)
     private void onComponentClicked(Style style, CallbackInfoReturnable<Boolean> cir) {
         if (style != null && style.getClickEvent() != null) {

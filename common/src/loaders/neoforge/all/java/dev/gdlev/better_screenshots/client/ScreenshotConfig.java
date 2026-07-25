@@ -67,9 +67,20 @@ public class ScreenshotConfig extends ScreenshotConfigData {
         if (instance.customUploadMethod == null) {
             instance.customUploadMethod = UploadMethod.POST;
         }
+        if (instance.customUploadBodyType == null) {
+            instance.customUploadBodyType = UploadBodyType.MULTIPART;
+        }
 
         if (instance.imgurClientId == null) instance.imgurClientId = "";
         if (instance.imgurAccessToken == null) instance.imgurAccessToken = "";
+
+        if (instance.immichBaseUrl == null) instance.immichBaseUrl = "";
+        if (instance.immichApiKey == null) instance.immichApiKey = "";
+        if (instance.immichDeviceId == null || instance.immichDeviceId.isBlank()) {
+            instance.immichDeviceId = "better-mc-screenshots";
+        }
+        if (instance.immichAlbumId == null) instance.immichAlbumId = "";
+        if (instance.immichAlbumName == null) instance.immichAlbumName = "";
 
         if (instance.s3Endpoint == null) instance.s3Endpoint = "";
         if (instance.s3Region == null) instance.s3Region = "";
@@ -81,12 +92,30 @@ public class ScreenshotConfig extends ScreenshotConfigData {
         }
 
         if (instance.customUploadUrl == null) instance.customUploadUrl = "";
+        if (instance.customFileField == null || instance.customFileField.isBlank()) {
+            instance.customFileField = "file";
+        }
+        if (instance.customResponseUrlJsonPath == null) instance.customResponseUrlJsonPath = "";
+        if (instance.customFallbackUrl == null) instance.customFallbackUrl = "";
         if (instance.customCookieKey == null) instance.customCookieKey = "";
         if (instance.customCookieValue == null) instance.customCookieValue = "";
         if (instance.customHeaderKey == null) instance.customHeaderKey = "";
         if (instance.customHeaderValue == null) instance.customHeaderValue = "";
+        if (instance.customHeaders == null) instance.customHeaders = new java.util.ArrayList<>();
+        if (!instance.customHeaderKey.isBlank() && instance.customHeaders.stream().noneMatch(entry ->
+                instance.customHeaderKey.equals(entry.key))) {
+            instance.customHeaders.add(new KeyValueEntry(instance.customHeaderKey, instance.customHeaderValue));
+            shouldSave = true;
+        }
         if (instance.customPostKey == null) instance.customPostKey = "";
         if (instance.customPostValue == null) instance.customPostValue = "";
+        if (instance.customFormFields == null) instance.customFormFields = new java.util.ArrayList<>();
+        if (!instance.customPostKey.isBlank() && instance.customFormFields.stream().noneMatch(entry ->
+                instance.customPostKey.equals(entry.key))) {
+            instance.customFormFields.add(new KeyValueEntry(instance.customPostKey, instance.customPostValue));
+            shouldSave = true;
+        }
+        if (instance.externalUploaderName == null) instance.externalUploaderName = "";
 
         if (shouldSave) {
             save();

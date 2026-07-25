@@ -670,7 +670,21 @@ public class ScreenshotGalleryScreen extends Screen {
         drawTopBar(context);
         extractTopControls(context, mouseX, mouseY, delta);
         ActionButtonTooltips.draw(context, font, this.width, this.height, mouseX, mouseY, hoveredActionButton, false);
+        renderInstantPreviewAboveGallery(context);
 
+    }
+
+
+    private void renderInstantPreviewAboveGallery(GuiGraphics context) {
+        flushGuiGraphics(context);
+        ScreenshotPreviewRenderer.renderAboveScreens(context);
+    }
+
+    private void flushGuiGraphics(Object context) {
+        try {
+            context.getClass().getMethod("flush").invoke(context);
+        } catch (ReflectiveOperationException ignored) {
+        }
     }
 
     private void drawSelectedPanel(GuiGraphics context) {

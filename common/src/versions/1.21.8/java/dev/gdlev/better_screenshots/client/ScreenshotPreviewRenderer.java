@@ -97,6 +97,8 @@ public class ScreenshotPreviewRenderer {
     private static long flashStart     = -1;
     private static long copyFlashStart = -1;
     private static long closeStart     = -1;
+    private static boolean previewAboveScreen = false;
+    private static boolean renderingAboveScreenPass = false;
 
     private static final long  FLASH_DURATION_MS = 400;
     private static final long  COPY_FLASH_MS     = 350;
@@ -226,6 +228,10 @@ public class ScreenshotPreviewRenderer {
 
 
     public static void setPreview(NativeImage image) {
+        setPreview(image, isNonChatScreenOpen());
+    }
+
+    public static void setPreview(NativeImage image, boolean aboveScreen) {
         if (previewTexture != null) previewTexture.close();
         previewTexture = new DynamicTexture(() -> "screenshot_preview", image);
         Minecraft.getInstance().getTextureManager()
@@ -245,6 +251,7 @@ public class ScreenshotPreviewRenderer {
         lastUploadError = "";
         currentPreviewId = null;
         currentPreviewFile = null;
+        previewAboveScreen = aboveScreen;
     }
 
     public static void prepareUploadIndicator(boolean enabled) {
@@ -312,12 +319,23 @@ public class ScreenshotPreviewRenderer {
     private static float easeInCubic(float t)  { return t * t * t; }
     private static float easeOutQuad(float t)  { return 1f - (1f - t) * (1f - t); }
 
+    public static void renderAboveScreens(GuiGraphics context) {
+        if (!previewAboveScreen) return;
+        renderingAboveScreenPass = true;
+        try {
+            render(context);
+        } finally {
+            renderingAboveScreenPass = false;
+        }
+    }
+
     public static void render(GuiGraphics context) {
         long now = System.currentTimeMillis();
         if (showFrom == -1) return;
         if (previewTexture == null || previewTexture.getPixels() == null) return;
 
         Minecraft mc = Minecraft.getInstance();
+        if (previewAboveScreen && isNonChatScreenOpen() && !renderingAboveScreenPass) return;
         ScreenshotConfig cfg = ScreenshotConfig.get();
 
         int screenW    = context.guiWidth();
@@ -564,6 +582,13 @@ public class ScreenshotPreviewRenderer {
                 context.fill(barX, barY, barX + barFillW, barY + uploadBarH, barColor);
             }
         }
+    }
+
+
+    private static boolean isNonChatScreenOpen() {
+        Minecraft mc = Minecraft.getInstance();
+        return mc.screen != null
+                && !(mc.screen instanceof net.minecraft.client.gui.screens.ChatScreen);
     }
 
     public static boolean handleClick(double mouseX, double mouseY) {

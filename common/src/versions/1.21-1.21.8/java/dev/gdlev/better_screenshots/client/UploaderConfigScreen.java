@@ -3,6 +3,7 @@ package dev.gdlev.better_screenshots.client;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import dev.gdlev.better_screenshots.common.ScreenshotConfigData;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -23,6 +24,7 @@ public class UploaderConfigScreen extends Screen {
 
     private static final int LABEL_W = 120;
     private static final int KV_GAP = 6;
+    private static final int TEXT_FIELD_MAX_LENGTH = 4096;
 
     private final List<RowWidget> dynamicWidgets = new ArrayList<>();
     private final List<RowLabel> dynamicLabels = new ArrayList<>();
@@ -31,7 +33,13 @@ public class UploaderConfigScreen extends Screen {
     private CycleButton<Boolean> autoCopyButton;
     private CycleButton<Boolean> autoUploadButton;
     private CycleButton<ScreenshotConfig.UploadProvider> providerButton;
+    private Button externalProfileButton;
+    private Button immichAlbumButton;
     private Button doneButton;
+
+    private List<ScreenshotUploader.ImmichAlbum> immichAlbums = new ArrayList<>();
+    private boolean immichAlbumsLoading = false;
+    private String immichAlbumError = "";
 
     private int scrollOffset = 0;
     private int maxScroll = 0;
@@ -65,6 +73,9 @@ public class UploaderConfigScreen extends Screen {
         clearWidgets();
         dynamicWidgets.clear();
         dynamicLabels.clear();
+        externalProfileButton = null;
+        immichAlbumButton = null;
+        UploaderProfileRegistry.ensureDirectory();
 
         ScreenshotConfig cfg = ScreenshotConfig.get();
 
@@ -108,6 +119,8 @@ public class UploaderConfigScreen extends Screen {
                             case S3 -> "better_screenshots.config.uploader.provider.s3";
                             case CUSTOM_HTTP -> "better_screenshots.config.uploader.provider.custom";
                             case CATBOX -> "better_screenshots.config.uploader.provider.catbox";
+                            case IMMICH -> "better_screenshots.config.uploader.provider.immich";
+                            case EXTERNAL_CUSTOM -> "better_screenshots.config.uploader.provider.external";
                         }))
                 .withValues(ScreenshotConfig.UploadProvider.values())
                 .withInitialValue(cfg.uploadProvider)
@@ -115,6 +128,9 @@ public class UploaderConfigScreen extends Screen {
                         Component.translatable("better_screenshots.config.uploader.provider"),
                         (btn, value) -> {
                             cfg.uploadProvider = value;
+                            if (value == ScreenshotConfig.UploadProvider.EXTERNAL_CUSTOM) {
+                                selectFirstExternalProfileIfNeeded();
+                            }
                             ScreenshotConfig.save();
                             rebuildDynamicWidgets();
                         }));
@@ -163,6 +179,25 @@ public class UploaderConfigScreen extends Screen {
             case CATBOX -> {
                 addLabel(row, "better_screenshots.config.uploader.catbox.info");
             }
+            case IMMICH -> {
+                row = addSingleEditRow(row,
+                        "better_screenshots.config.uploader.immich.url",
+                        cfg.immichBaseUrl,
+                        value -> cfg.immichBaseUrl = value);
+                row = addSingleEditRow(row,
+                        "better_screenshots.config.uploader.immich.api_key",
+                        cfg.immichApiKey,
+                        value -> cfg.immichApiKey = value);
+                addSingleEditRow(row,
+                        "better_screenshots.config.uploader.immich.device_id",
+                        cfg.immichDeviceId,
+                        value -> cfg.immichDeviceId = value);
+                row++;
+                row = addImmichAlbumRow(row);
+                addSectionButton(row,
+                        "better_screenshots.config.uploader.immich.refresh_albums",
+                        this::refreshImmichAlbums);
+            }
             case IMGUR -> {
                 row = addSingleEditRow(row,
                         "better_screenshots.config.uploader.imgur.client_id",
@@ -205,42 +240,78 @@ public class UploaderConfigScreen extends Screen {
                         cfg.customUploadUrl,
                         value -> cfg.customUploadUrl = value);
 
-                addLabel(row, "better_screenshots.config.uploader.custom.method");
-                CycleButton<ScreenshotConfig.UploadMethod> methodButton = addRenderableWidget(
-                        CycleButton.builder(
-                                        (ScreenshotConfig.UploadMethod m) -> Component.translatable(switch (m) {
-                                            case POST -> "better_screenshots.config.uploader.method.post";
-                                            case PUT -> "better_screenshots.config.uploader.method.put";
-                                        }))
-                                .withValues(ScreenshotConfig.UploadMethod.values())
-                                .withInitialValue(cfg.customUploadMethod)
-                                .create(fieldX(), dynamicRowY(row), fieldW(), BTN_H,
-                                        Component.translatable("better_screenshots.config.uploader.custom.method"),
-                                        (btn, value) -> {
-                                            cfg.customUploadMethod = value;
-                                            ScreenshotConfig.save();
-                                        }));
-                dynamicWidgets.add(new RowWidget(methodButton, row));
-                row++;
-
+                row = addUploadMethodRow(row, cfg.customUploadMethod, value -> cfg.customUploadMethod = value);
+                row = addBodyTypeRow(row, cfg.customUploadBodyType, value -> cfg.customUploadBodyType = value);
+                row = addSingleEditRow(row,
+                        "better_screenshots.config.uploader.custom.file_field",
+                        cfg.customFileField,
+                        value -> cfg.customFileField = value);
+                row = addSingleEditRow(row,
+                        "better_screenshots.config.uploader.custom.response_json_path",
+                        cfg.customResponseUrlJsonPath,
+                        value -> cfg.customResponseUrlJsonPath = value);
+                row = addSingleEditRow(row,
+                        "better_screenshots.config.uploader.custom.fallback_url",
+                        cfg.customFallbackUrl,
+                        value -> cfg.customFallbackUrl = value);
                 row = addKeyValueRow(row,
                         "better_screenshots.config.uploader.custom.cookie",
                         cfg.customCookieKey,
                         cfg.customCookieValue,
                         key -> cfg.customCookieKey = key,
                         value -> cfg.customCookieValue = value);
-                row = addKeyValueRow(row,
-                        "better_screenshots.config.uploader.custom.header",
-                        cfg.customHeaderKey,
-                        cfg.customHeaderValue,
-                        key -> cfg.customHeaderKey = key,
-                        value -> cfg.customHeaderValue = value);
-                addKeyValueRow(row,
-                        "better_screenshots.config.uploader.custom.post_field",
-                        cfg.customPostKey,
-                        cfg.customPostValue,
-                        key -> cfg.customPostKey = key,
-                        value -> cfg.customPostValue = value);
+
+                row = addSectionButton(row,
+                        "better_screenshots.config.uploader.custom.add_header",
+                        () -> {
+                            cfg.customHeaders.add(new ScreenshotConfigData.KeyValueEntry());
+                            ScreenshotConfig.save();
+                            rebuildDynamicWidgets();
+                        });
+                for (int i = 0; i < cfg.customHeaders.size(); i++) {
+                    final int index = i;
+                    ScreenshotConfigData.KeyValueEntry entry = cfg.customHeaders.get(i);
+                    row = addListKeyValueRow(row,
+                            "better_screenshots.config.uploader.custom.header",
+                            entry.key,
+                            entry.value,
+                            key -> entry.key = key,
+                            value -> entry.value = value,
+                            () -> {
+                                cfg.customHeaders.remove(index);
+                                ScreenshotConfig.save();
+                                rebuildDynamicWidgets();
+                            });
+                }
+
+                row = addSectionButton(row,
+                        "better_screenshots.config.uploader.custom.add_field",
+                        () -> {
+                            cfg.customFormFields.add(new ScreenshotConfigData.KeyValueEntry());
+                            ScreenshotConfig.save();
+                            rebuildDynamicWidgets();
+                        });
+                for (int i = 0; i < cfg.customFormFields.size(); i++) {
+                    final int index = i;
+                    ScreenshotConfigData.KeyValueEntry entry = cfg.customFormFields.get(i);
+                    addListKeyValueRow(row,
+                            "better_screenshots.config.uploader.custom.post_field",
+                            entry.key,
+                            entry.value,
+                            key -> entry.key = key,
+                            value -> entry.value = value,
+                            () -> {
+                                cfg.customFormFields.remove(index);
+                                ScreenshotConfig.save();
+                                rebuildDynamicWidgets();
+                            });
+                    row++;
+                }
+            }
+            case EXTERNAL_CUSTOM -> {
+                UploaderProfileRegistry.reload();
+                row = addExternalProfileRow(row);
+                addLabel(row, "better_screenshots.config.uploader.external.folder");
             }
         }
 
@@ -269,6 +340,41 @@ public class UploaderConfigScreen extends Screen {
         }
     }
 
+    private void selectFirstExternalProfileIfNeeded() {
+        ScreenshotConfig cfg = ScreenshotConfig.get();
+        if (cfg.externalUploaderName != null && !cfg.externalUploaderName.isBlank()) return;
+        List<UploaderProfileRegistry.Profile> profiles = UploaderProfileRegistry.reload();
+        if (!profiles.isEmpty()) {
+            cfg.externalUploaderName = profiles.getFirst().name;
+        }
+    }
+
+    private Component externalProfileMessage() {
+        List<UploaderProfileRegistry.Profile> profiles = UploaderProfileRegistry.profiles();
+        if (profiles.isEmpty()) {
+            return Component.translatable("better_screenshots.config.uploader.external.none");
+        }
+        ScreenshotConfig cfg = ScreenshotConfig.get();
+        UploaderProfileRegistry.Profile selected = UploaderProfileRegistry.selected(cfg.externalUploaderName);
+        return Component.literal(selected == null ? profiles.getFirst().name : selected.name);
+    }
+
+    private void cycleExternalProfile() {
+        List<UploaderProfileRegistry.Profile> profiles = UploaderProfileRegistry.reload();
+        if (profiles.isEmpty()) return;
+
+        ScreenshotConfig cfg = ScreenshotConfig.get();
+        int idx = -1;
+        for (int i = 0; i < profiles.size(); i++) {
+            if (profiles.get(i).name.equals(cfg.externalUploaderName)) {
+                idx = i;
+                break;
+            }
+        }
+        cfg.externalUploaderName = profiles.get((idx + 1) % profiles.size()).name;
+        ScreenshotConfig.save();
+    }
+
     private void addLabel(int row, String key) {
         dynamicLabels.add(new RowLabel(Component.translatable(key), row));
     }
@@ -277,6 +383,7 @@ public class UploaderConfigScreen extends Screen {
         addLabel(row, labelKey);
 
         EditBox box = new EditBox(font, fieldX(), dynamicRowY(row), fieldW(), BTN_H, Component.translatable(labelKey));
+        box.setMaxLength(TEXT_FIELD_MAX_LENGTH);
         box.setValue(currentValue == null ? "" : currentValue);
         box.setResponder(value -> {
             onChange.accept(value);
@@ -284,6 +391,55 @@ public class UploaderConfigScreen extends Screen {
         });
 
         dynamicWidgets.add(new RowWidget(addRenderableWidget(box), row));
+        return row + 1;
+    }
+
+    private int addUploadMethodRow(int row, ScreenshotConfig.UploadMethod currentValue, Consumer<ScreenshotConfig.UploadMethod> onChange) {
+        addLabel(row, "better_screenshots.config.uploader.custom.method");
+        CycleButton<ScreenshotConfig.UploadMethod> methodButton = addRenderableWidget(
+                CycleButton.builder(
+                                (ScreenshotConfig.UploadMethod m) -> Component.translatable(switch (m) {
+                                    case POST -> "better_screenshots.config.uploader.method.post";
+                                    case PUT -> "better_screenshots.config.uploader.method.put";
+                                    case PATCH -> "better_screenshots.config.uploader.method.patch";
+                                }))
+                        .withValues(ScreenshotConfig.UploadMethod.values())
+                        .withInitialValue(currentValue)
+                        .create(fieldX(), dynamicRowY(row), fieldW(), BTN_H,
+                                Component.translatable("better_screenshots.config.uploader.custom.method"),
+                                (btn, value) -> {
+                                    onChange.accept(value);
+                                    ScreenshotConfig.save();
+                                }));
+        dynamicWidgets.add(new RowWidget(methodButton, row));
+        return row + 1;
+    }
+
+    private int addBodyTypeRow(int row, ScreenshotConfig.UploadBodyType currentValue, Consumer<ScreenshotConfig.UploadBodyType> onChange) {
+        addLabel(row, "better_screenshots.config.uploader.custom.body_type");
+        CycleButton<ScreenshotConfig.UploadBodyType> bodyTypeButton = addRenderableWidget(
+                CycleButton.builder(
+                                (ScreenshotConfig.UploadBodyType type) -> Component.translatable(switch (type) {
+                                    case MULTIPART -> "better_screenshots.config.uploader.body.multipart";
+                                    case RAW_PNG -> "better_screenshots.config.uploader.body.raw_png";
+                                }))
+                        .withValues(ScreenshotConfig.UploadBodyType.values())
+                        .withInitialValue(currentValue)
+                        .create(fieldX(), dynamicRowY(row), fieldW(), BTN_H,
+                                Component.translatable("better_screenshots.config.uploader.custom.body_type"),
+                                (btn, value) -> {
+                                    onChange.accept(value);
+                                    ScreenshotConfig.save();
+                                }));
+        dynamicWidgets.add(new RowWidget(bodyTypeButton, row));
+        return row + 1;
+    }
+
+    private int addSectionButton(int row, String labelKey, Runnable onClick) {
+        Button button = Button.builder(Component.translatable(labelKey), btn -> onClick.run())
+                .bounds(fieldX(), dynamicRowY(row), fieldW(), BTN_H)
+                .build();
+        dynamicWidgets.add(new RowWidget(addRenderableWidget(button), row));
         return row + 1;
     }
 
@@ -301,6 +457,7 @@ public class UploaderConfigScreen extends Screen {
 
         EditBox keyBox = new EditBox(font, fieldX(), dynamicRowY(row), keyW, BTN_H,
                 Component.translatable("better_screenshots.config.uploader.column.key"));
+        keyBox.setMaxLength(TEXT_FIELD_MAX_LENGTH);
         keyBox.setValue(currentKey == null ? "" : currentKey);
         keyBox.setHint(Component.translatable("better_screenshots.config.uploader.column.key"));
         keyBox.setResponder(value -> {
@@ -310,6 +467,7 @@ public class UploaderConfigScreen extends Screen {
 
         EditBox valueBox = new EditBox(font, fieldX() + keyW + KV_GAP, dynamicRowY(row), valueW, BTN_H,
                 Component.translatable("better_screenshots.config.uploader.column.value"));
+        valueBox.setMaxLength(TEXT_FIELD_MAX_LENGTH);
         valueBox.setValue(currentValue == null ? "" : currentValue);
         valueBox.setHint(Component.translatable("better_screenshots.config.uploader.column.value"));
         valueBox.setResponder(value -> {
@@ -320,6 +478,151 @@ public class UploaderConfigScreen extends Screen {
         dynamicWidgets.add(new RowWidget(addRenderableWidget(keyBox), row));
         dynamicWidgets.add(new RowWidget(addRenderableWidget(valueBox), row));
         return row + 1;
+    }
+
+    private int addListKeyValueRow(
+            int row,
+            String labelKey,
+            String currentKey,
+            String currentValue,
+            Consumer<String> onKeyChange,
+            Consumer<String> onValueChange,
+            Runnable onRemove) {
+        addLabel(row, labelKey);
+
+        int removeW = 20;
+        int keyW = (fieldW() - KV_GAP * 2 - removeW) / 2;
+        int valueW = fieldW() - keyW - removeW - KV_GAP * 2;
+
+        EditBox keyBox = new EditBox(font, fieldX(), dynamicRowY(row), keyW, BTN_H,
+                Component.translatable("better_screenshots.config.uploader.column.key"));
+        keyBox.setMaxLength(TEXT_FIELD_MAX_LENGTH);
+        keyBox.setValue(currentKey == null ? "" : currentKey);
+        keyBox.setHint(Component.translatable("better_screenshots.config.uploader.column.key"));
+        keyBox.setResponder(value -> {
+            onKeyChange.accept(value);
+            ScreenshotConfig.save();
+        });
+
+        EditBox valueBox = new EditBox(font, fieldX() + keyW + KV_GAP, dynamicRowY(row), valueW, BTN_H,
+                Component.translatable("better_screenshots.config.uploader.column.value"));
+        valueBox.setMaxLength(TEXT_FIELD_MAX_LENGTH);
+        valueBox.setValue(currentValue == null ? "" : currentValue);
+        valueBox.setHint(Component.translatable("better_screenshots.config.uploader.column.value"));
+        valueBox.setResponder(value -> {
+            onValueChange.accept(value);
+            ScreenshotConfig.save();
+        });
+
+        Button removeButton = Button.builder(Component.literal("×"), btn -> onRemove.run())
+                .bounds(fieldX() + keyW + KV_GAP + valueW + KV_GAP, dynamicRowY(row), removeW, BTN_H)
+                .build();
+
+        dynamicWidgets.add(new RowWidget(addRenderableWidget(keyBox), row));
+        dynamicWidgets.add(new RowWidget(addRenderableWidget(valueBox), row));
+        dynamicWidgets.add(new RowWidget(addRenderableWidget(removeButton), row));
+        return row + 1;
+    }
+
+    private int addExternalProfileRow(int row) {
+        addLabel(row, "better_screenshots.config.uploader.external.profile");
+        externalProfileButton = Button.builder(externalProfileMessage(), btn -> {
+                    cycleExternalProfile();
+                    btn.setMessage(externalProfileMessage());
+                })
+                .bounds(fieldX(), dynamicRowY(row), fieldW(), BTN_H)
+                .build();
+        dynamicWidgets.add(new RowWidget(addRenderableWidget(externalProfileButton), row));
+        return row + 1;
+    }
+
+    private int addImmichAlbumRow(int row) {
+        addLabel(row, "better_screenshots.config.uploader.immich.album");
+        immichAlbumButton = Button.builder(immichAlbumMessage(), btn -> {
+                    if (immichAlbums.isEmpty()) {
+                        refreshImmichAlbums();
+                    } else {
+                        cycleImmichAlbum();
+                    }
+                    btn.setMessage(immichAlbumMessage());
+                })
+                .bounds(fieldX(), dynamicRowY(row), fieldW(), BTN_H)
+                .build();
+        dynamicWidgets.add(new RowWidget(addRenderableWidget(immichAlbumButton), row));
+        return row + 1;
+    }
+
+    private Component immichAlbumMessage() {
+        ScreenshotConfig cfg = ScreenshotConfig.get();
+        if (immichAlbumsLoading) {
+            return Component.translatable("better_screenshots.config.uploader.immich.albums_loading");
+        }
+        if (!immichAlbumError.isBlank()) {
+            return Component.literal(immichAlbumError);
+        }
+        if (cfg.immichAlbumId == null || cfg.immichAlbumId.isBlank()) {
+            return Component.translatable("better_screenshots.config.uploader.immich.album.none");
+        }
+        if (cfg.immichAlbumName != null && !cfg.immichAlbumName.isBlank()) {
+            return Component.literal(cfg.immichAlbumName);
+        }
+        return Component.literal(cfg.immichAlbumId);
+    }
+
+    private void cycleImmichAlbum() {
+        ScreenshotConfig cfg = ScreenshotConfig.get();
+        int current = -1;
+        for (int i = 0; i < immichAlbums.size(); i++) {
+            if (immichAlbums.get(i).id().equals(cfg.immichAlbumId)) {
+                current = i;
+                break;
+            }
+        }
+        if (current < 0) {
+            cfg.immichAlbumId = immichAlbums.getFirst().id();
+            cfg.immichAlbumName = immichAlbums.getFirst().name();
+        } else if (current + 1 >= immichAlbums.size()) {
+            cfg.immichAlbumId = "";
+            cfg.immichAlbumName = "";
+        } else {
+            ScreenshotUploader.ImmichAlbum album = immichAlbums.get(current + 1);
+            cfg.immichAlbumId = album.id();
+            cfg.immichAlbumName = album.name();
+        }
+        ScreenshotConfig.save();
+    }
+
+    private void refreshImmichAlbums() {
+        if (immichAlbumsLoading) return;
+        ScreenshotConfig cfg = ScreenshotConfig.get();
+        immichAlbumsLoading = true;
+        immichAlbumError = "";
+        if (immichAlbumButton != null) {
+            immichAlbumButton.setMessage(immichAlbumMessage());
+        }
+        Thread.ofVirtual().start(() -> {
+            try {
+                List<ScreenshotUploader.ImmichAlbum> albums = ScreenshotUploader.fetchImmichAlbums(cfg);
+                minecraft.execute(() -> {
+                    immichAlbums = albums;
+                    immichAlbumsLoading = false;
+                    if (immichAlbumButton != null) {
+                        immichAlbumButton.setMessage(immichAlbumMessage());
+                    }
+                });
+            } catch (Exception e) {
+                String message = e.getMessage() == null || e.getMessage().isBlank()
+                        ? e.getClass().getSimpleName()
+                        : e.getMessage();
+                minecraft.execute(() -> {
+                    immichAlbumError = message;
+                    immichAlbumsLoading = false;
+                    if (immichAlbumButton != null) {
+                        immichAlbumButton.setMessage(immichAlbumMessage());
+                    }
+                });
+            }
+        });
     }
 
     @Override

@@ -8,6 +8,7 @@
     "ScreenshotRecorderMixin",
     "MouseHandlerMixin",
     "PauseScreenMixin",
+    "ScreenPreviewMixin",
     "TitleScreenMixin"
   ],
   "injectors": {

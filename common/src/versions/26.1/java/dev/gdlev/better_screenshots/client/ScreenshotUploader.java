@@ -2,6 +2,7 @@ package dev.gdlev.better_screenshots.client;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
+import dev.gdlev.better_screenshots.common.ScreenshotConfigData;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
@@ -16,7 +17,10 @@ import java.security.MessageDigest;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HexFormat;
+import java.util.List;
+import java.util.UUID;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import net.minecraft.ChatFormatting;
@@ -43,6 +47,40 @@ public final class ScreenshotUploader {
 
     private ScreenshotUploader() {}
 
+    public record ImmichAlbum(String id, String name) {}
+
+    public static List<ImmichAlbum> fetchImmichAlbums(ScreenshotConfig cfg) throws Exception {
+        String baseUrl = blankToNull(cfg.immichBaseUrl);
+        String apiKey = blankToNull(cfg.immichApiKey);
+        if (baseUrl == null || apiKey == null) {
+            throw new IllegalArgumentException("Immich requires Server URL and API Key.");
+        }
+
+        HttpRequest req = HttpRequest.newBuilder(URI.create(normalizeImmichApiBase(baseUrl) + "/albums"))
+                .version(HttpClient.Version.HTTP_1_1)
+                .header("Accept", "application/json")
+                .header("x-api-key", apiKey)
+                .GET()
+                .build();
+        HttpResponse<String> response = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
+        ensureOk(response, "Immich albums");
+
+        List<ImmichAlbum> albums = new ArrayList<>();
+        JsonElement root = JsonParser.parseString(response.body());
+        if (root != null && root.isJsonArray()) {
+            for (JsonElement item : root.getAsJsonArray()) {
+                if (!item.isJsonObject()) continue;
+                var obj = item.getAsJsonObject();
+                String id = obj.has("id") && !obj.get("id").isJsonNull() ? obj.get("id").getAsString() : "";
+                String name = obj.has("albumName") && !obj.get("albumName").isJsonNull()
+                        ? obj.get("albumName").getAsString()
+                        : id;
+                if (!id.isBlank()) albums.add(new ImmichAlbum(id, name));
+            }
+        }
+        return albums;
+    }
+
     public static void uploadAsync(File screenshotFile, Listener listener) {
         Thread.ofVirtual().start(() -> {
             try {
@@ -60,6 +98,8 @@ public final class ScreenshotUploader {
                     case S3 -> uploadS3(cfg, screenshotFile, bytes, listener);
                     case CUSTOM_HTTP -> uploadCustom(cfg, screenshotFile, bytes, listener);
                     case CATBOX -> uploadCatbox(screenshotFile, bytes, listener);
+                    case IMMICH -> uploadImmich(cfg, screenshotFile, bytes, listener);
+                    case EXTERNAL_CUSTOM -> uploadExternal(cfg, screenshotFile, bytes, listener);
                     case DISABLED -> null;
                 };
 
@@ -105,7 +145,7 @@ public final class ScreenshotUploader {
         Minecraft client = Minecraft.getInstance();
 
         client.getToastManager().addToast(
-                SystemToast.multiline(client, SystemToast.SystemToastId.NARRATOR_TOGGLE, title, description)
+                new SystemToast(SystemToast.SystemToastId.NARRATOR_TOGGLE, title, description)
         );
     }
 
@@ -219,6 +259,7 @@ public final class ScreenshotUploader {
                 .field("type", "file");
 
         HttpRequest.Builder req = HttpRequest.newBuilder(URI.create("https://api.imgur.com/3/image"))
+                .version(HttpClient.Version.HTTP_1_1)
                 .header("Content-Type", "multipart/form-data; boundary=" + body.boundary)
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body.toBytes()));
         if (accessToken != null) {
@@ -245,6 +286,7 @@ public final class ScreenshotUploader {
                 .field("reqtype", "fileupload");
 
         HttpRequest req = HttpRequest.newBuilder(URI.create("https://catbox.moe/user/api.php"))
+                .version(HttpClient.Version.HTTP_1_1)
                 .header("Content-Type", "multipart/form-data; boundary=" + body.boundary)
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body.toBytes()))
                 .build();
@@ -269,7 +311,8 @@ public final class ScreenshotUploader {
 
         listener.onProgress(0.20);
 
-        HttpRequest.Builder req = HttpRequest.newBuilder(URI.create(normalizeEndpoint(url)));
+        HttpRequest.Builder req = HttpRequest.newBuilder(URI.create(normalizeEndpoint(url)))
+                .version(HttpClient.Version.HTTP_1_1);
 
         String cookieKey = blankToNull(cfg.customCookieKey);
         String cookieValue = blankToNull(cfg.customCookieValue);
@@ -277,33 +320,225 @@ public final class ScreenshotUploader {
             req.header("Cookie", cookieKey + "=" + (cookieValue == null ? "" : cookieValue));
         }
 
-        String headerKey = blankToNull(cfg.customHeaderKey);
-        String headerValue = blankToNull(cfg.customHeaderValue);
-        if (headerKey != null) {
-            req.header(headerKey, headerValue == null ? "" : headerValue);
+        for (ScreenshotConfigData.KeyValueEntry header : cfg.customHeaders) {
+            String key = blankToNull(header == null ? null : header.key);
+            if (key != null) {
+                req.header(key, expand(header.value, file, bytes));
+            }
         }
 
-        if (cfg.customUploadMethod == ScreenshotConfig.UploadMethod.PUT) {
+        if (cfg.customUploadBodyType == ScreenshotConfig.UploadBodyType.RAW_PNG) {
             req.header("Content-Type", "image/png");
-            req.PUT(HttpRequest.BodyPublishers.ofByteArray(bytes));
+            applyBody(req, cfg.customUploadMethod, HttpRequest.BodyPublishers.ofByteArray(bytes));
         } else {
-            MultipartBody body = multipart("file", file.getName(), bytes);
-            String postKey = blankToNull(cfg.customPostKey);
-            if (postKey != null) {
-                body.field(postKey, cfg.customPostValue == null ? "" : cfg.customPostValue);
+            MultipartBody body = multipart(blankToDefault(cfg.customFileField, "file"), file.getName(), bytes);
+            for (ScreenshotConfigData.KeyValueEntry field : cfg.customFormFields) {
+                String key = blankToNull(field == null ? null : field.key);
+                if (key != null) {
+                    body.field(key, expand(field.value, file, bytes));
+                }
             }
             req.header("Content-Type", "multipart/form-data; boundary=" + body.boundary);
-            req.POST(HttpRequest.BodyPublishers.ofByteArray(body.toBytes()));
+            applyBody(req, cfg.customUploadMethod, HttpRequest.BodyPublishers.ofByteArray(body.toBytes()));
         }
 
         HttpResponse<String> response = HTTP.send(req.build(), HttpResponse.BodyHandlers.ofString());
         listener.onProgress(0.85);
         ensureOk(response, "Custom uploader");
 
-        String resolved = findUrl(response.body());
+        String responseBody = response.body();
+        String responsePath = blankToNull(cfg.customResponseUrlJsonPath);
+        if (responsePath != null) {
+            String responsePathValue = findJsonPath(responseBody, responsePath);
+            if (responsePathValue != null && !responsePathValue.isBlank()) return responsePathValue.trim();
+        }
+
+        String resolved = findUrl(responseBody);
         if (resolved != null) return resolved;
 
-        return url;
+        String fallback = blankToNull(cfg.customFallbackUrl);
+        return fallback == null ? url : expand(fallback, file, bytes, responseBody);
+    }
+
+    private static String uploadImmich(
+            ScreenshotConfig cfg, File file, byte[] bytes, Listener listener) throws Exception {
+        String baseUrl = blankToNull(cfg.immichBaseUrl);
+        String apiKey = blankToNull(cfg.immichApiKey);
+        if (baseUrl == null || apiKey == null) {
+            throw new IllegalArgumentException("Immich requires Server URL and API Key.");
+        }
+
+        listener.onProgress(0.20);
+
+        String endpoint = normalizeImmichApiBase(baseUrl) + "/assets";
+        String modified = Instant.ofEpochMilli(file.lastModified()).toString();
+        String deviceId = blankToDefault(cfg.immichDeviceId, "better-mc-screenshots");
+        String deviceAssetId = sha1Hex((file.getAbsolutePath() + ":" + file.lastModified() + ":" + file.length())
+                .getBytes(StandardCharsets.UTF_8));
+
+        MultipartBody body = multipart("assetData", file.getName(), bytes)
+                .field("deviceAssetId", deviceAssetId)
+                .field("deviceId", deviceId)
+                .field("fileCreatedAt", modified)
+                .field("fileModifiedAt", modified)
+                .field("filename", file.getName())
+                .field("isFavorite", "false");
+
+        HttpRequest req = HttpRequest.newBuilder(URI.create(endpoint))
+                .version(HttpClient.Version.HTTP_1_1)
+                .header("Accept", "application/json")
+                .header("x-api-key", apiKey)
+                .header("Content-Type", "multipart/form-data; boundary=" + body.boundary)
+                .POST(HttpRequest.BodyPublishers.ofByteArray(body.toBytes()))
+                .build();
+
+        HttpResponse<String> response = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
+        listener.onProgress(0.85);
+        ensureOk(response, "Immich");
+
+        String id = findJsonPath(response.body(), "id");
+        String albumId = blankToNull(cfg.immichAlbumId);
+        if (id != null && !id.isBlank() && albumId != null) {
+            addImmichAssetToAlbum(cfg, id, albumId);
+        }
+        return id == null || id.isBlank() ? endpoint : normalizeImmichApiBase(baseUrl).replaceAll("/api$", "") + "/photos/" + id;
+    }
+
+    private static void addImmichAssetToAlbum(ScreenshotConfig cfg, String assetId, String albumId) throws Exception {
+        String baseUrl = blankToNull(cfg.immichBaseUrl);
+        String apiKey = blankToNull(cfg.immichApiKey);
+        if (baseUrl == null || apiKey == null || blankToNull(assetId) == null || blankToNull(albumId) == null) {
+            return;
+        }
+
+        String json = "{\"albumIds\":[\"" + escapeJson(albumId) + "\"],\"assetIds\":[\"" + escapeJson(assetId) + "\"]}";
+        HttpRequest req = HttpRequest.newBuilder(URI.create(normalizeImmichApiBase(baseUrl) + "/albums/assets"))
+                .version(HttpClient.Version.HTTP_1_1)
+                .header("Accept", "application/json")
+                .header("Content-Type", "application/json")
+                .header("x-api-key", apiKey)
+                .PUT(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8))
+                .build();
+
+        HttpResponse<String> response = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
+        ensureOk(response, "Immich album");
+    }
+
+    private static String uploadExternal(
+            ScreenshotConfig cfg, File file, byte[] bytes, Listener listener) throws Exception {
+        UploaderProfileRegistry.Profile profile = UploaderProfileRegistry.selected(cfg.externalUploaderName);
+        if (profile == null) {
+            throw new IllegalArgumentException("No external uploader profile found.");
+        }
+        if (cfg.externalUploaderName == null || cfg.externalUploaderName.isBlank()) {
+            cfg.externalUploaderName = profile.name;
+            ScreenshotConfig.save();
+        }
+        return uploadProfile(profile, file, bytes, listener);
+    }
+
+    private static String uploadProfile(
+            UploaderProfileRegistry.Profile profile, File file, byte[] bytes, Listener listener) throws Exception {
+        String url = blankToNull(expand(profile.url, file, bytes));
+        if (url == null) throw new IllegalArgumentException("External uploader URL is required.");
+
+        listener.onProgress(0.20);
+
+        HttpRequest.Builder req = HttpRequest.newBuilder(URI.create(normalizeEndpoint(url)))
+                .version(HttpClient.Version.HTTP_1_1);
+        for (UploaderProfileRegistry.Entry header : profile.headers) {
+            String key = blankToNull(header == null ? null : header.key);
+            if (key != null) {
+                req.header(key, expand(header.value, file, bytes));
+            }
+        }
+
+        ScreenshotConfig.UploadMethod method = parseMethod(profile.method);
+        if ("RAW_PNG".equalsIgnoreCase(profile.bodyType)) {
+            req.header("Content-Type", "image/png");
+            applyBody(req, method, HttpRequest.BodyPublishers.ofByteArray(bytes));
+        } else {
+            MultipartBody body = multipart(blankToDefault(profile.fileField, "file"), file.getName(), bytes);
+            for (UploaderProfileRegistry.Entry field : profile.formFields) {
+                String key = blankToNull(field == null ? null : field.key);
+                if (key != null) {
+                    body.field(key, expand(field.value, file, bytes));
+                }
+            }
+            req.header("Content-Type", "multipart/form-data; boundary=" + body.boundary);
+            applyBody(req, method, HttpRequest.BodyPublishers.ofByteArray(body.toBytes()));
+        }
+
+        HttpResponse<String> response = HTTP.send(req.build(), HttpResponse.BodyHandlers.ofString());
+        listener.onProgress(0.85);
+        ensureOk(response, profile.name);
+
+        String responseBody = response.body();
+        String responseHeader = blankToNull(profile.responseUrlHeader);
+        if (responseHeader != null) {
+            String value = response.headers().firstValue(responseHeader).orElse("");
+            if (!value.isBlank()) return value.trim();
+        }
+
+        String responsePath = blankToNull(profile.responseUrlJsonPath);
+        String responsePathValue = null;
+        if (responsePath != null) {
+            responsePathValue = findJsonPath(responseBody, responsePath);
+        }
+
+        for (UploaderProfileRegistry.FollowUpRequest request : profile.afterUploadRequests) {
+            executeFollowUpRequest(request, file, bytes, responseBody);
+        }
+
+        if (responsePathValue != null && !responsePathValue.isBlank()) return responsePathValue.trim();
+
+        String resolved = findUrl(responseBody);
+        if (resolved != null) return resolved;
+        String fallback = blankToNull(profile.fallbackUrl);
+        return fallback == null ? url : expand(fallback, file, bytes, responseBody);
+    }
+
+    private static void executeFollowUpRequest(
+            UploaderProfileRegistry.FollowUpRequest request,
+            File file,
+            byte[] bytes,
+            String uploadResponseBody) throws Exception {
+        if (request == null) return;
+        String url = blankToNull(expand(request.url, file, bytes, uploadResponseBody));
+        if (url == null) return;
+
+        HttpRequest.Builder req = HttpRequest.newBuilder(URI.create(normalizeEndpoint(url)))
+                .version(HttpClient.Version.HTTP_1_1);
+        for (UploaderProfileRegistry.Entry header : request.headers) {
+            String key = blankToNull(header == null ? null : header.key);
+            if (key != null) {
+                req.header(key, expand(header.value, file, bytes, uploadResponseBody));
+            }
+        }
+
+        ScreenshotConfig.UploadMethod method = parseMethod(request.method);
+        if ("FORM".equalsIgnoreCase(request.bodyType)) {
+            StringBuilder form = new StringBuilder();
+            for (UploaderProfileRegistry.Entry field : request.formFields) {
+                String key = blankToNull(field == null ? null : field.key);
+                if (key == null) continue;
+                if (!form.isEmpty()) form.append('&');
+                form.append(URLEncoder.encode(key, StandardCharsets.UTF_8));
+                form.append('=');
+                form.append(URLEncoder.encode(expand(field.value, file, bytes, uploadResponseBody), StandardCharsets.UTF_8));
+            }
+            req.header("Content-Type", "application/x-www-form-urlencoded");
+            applyBody(req, method, HttpRequest.BodyPublishers.ofString(form.toString(), StandardCharsets.UTF_8));
+        } else if ("EMPTY".equalsIgnoreCase(request.bodyType)) {
+            applyBody(req, method, HttpRequest.BodyPublishers.noBody());
+        } else {
+            req.header("Content-Type", "application/json");
+            applyBody(req, method, HttpRequest.BodyPublishers.ofString(
+                    expand(request.body, file, bytes, uploadResponseBody), StandardCharsets.UTF_8));
+        }
+
+        HttpResponse<String> response = HTTP.send(req.build(), HttpResponse.BodyHandlers.ofString());
+        ensureOk(response, blankToDefault(request.name, "Follow-up request"));
     }
 
     private static String uploadS3(
@@ -381,6 +616,7 @@ public final class ScreenshotUploader {
         listener.onProgress(0.25);
 
         HttpRequest req = HttpRequest.newBuilder(URI.create(requestUrl))
+                .version(HttpClient.Version.HTTP_1_1)
                 .header("Content-Type", contentType)
                 .header("Host", hostHeader)
                 .header("x-amz-date", amzDate)
@@ -424,6 +660,12 @@ public final class ScreenshotUploader {
         return e;
     }
 
+    private static String normalizeImmichApiBase(String endpoint) {
+        String e = normalizeEndpoint(endpoint);
+        while (e.endsWith("/")) e = e.substring(0, e.length() - 1);
+        return e.endsWith("/api") ? e : e + "/api";
+    }
+
     private static String normalizeUriPath(String rawPath) {
         if (rawPath == null || rawPath.isBlank()) return "/";
         String p = rawPath.startsWith("/") ? rawPath : "/" + rawPath;
@@ -460,6 +702,263 @@ public final class ScreenshotUploader {
         return v.isEmpty() ? null : v;
     }
 
+    private static String blankToDefault(String value, String fallback) {
+        String v = blankToNull(value);
+        return v == null ? fallback : v;
+    }
+
+    private static ScreenshotConfig.UploadMethod parseMethod(String value) {
+        try {
+            return ScreenshotConfig.UploadMethod.valueOf(blankToDefault(value, "POST").toUpperCase(java.util.Locale.ROOT));
+        } catch (Exception ignored) {
+            return ScreenshotConfig.UploadMethod.POST;
+        }
+    }
+
+    private static void applyBody(
+            HttpRequest.Builder req,
+            ScreenshotConfig.UploadMethod method,
+            HttpRequest.BodyPublisher body) {
+        switch (method == null ? ScreenshotConfig.UploadMethod.POST : method) {
+            case PUT -> req.PUT(body);
+            case PATCH -> req.method("PATCH", body);
+            case POST -> req.POST(body);
+        }
+    }
+
+    private static String expand(String value, File file, byte[] bytes) {
+        return expand(value, file, bytes, null);
+    }
+
+    private static String expand(String value, File file, byte[] bytes, String responseBody) {
+        if (value == null) return "";
+        String isoModified = Instant.ofEpochMilli(file.lastModified()).toString();
+        GameplayPlaceholders gameplay = gameplayPlaceholders();
+        String expanded = value
+                .replace("{filename}", file.getName())
+                .replace("{fileName}", file.getName())
+                .replace("{timestamp}", String.valueOf(System.currentTimeMillis()))
+                .replace("{isoNow}", Instant.now().toString())
+                .replace("{isoModified}", isoModified)
+                .replace("{uuid}", UUID.randomUUID().toString())
+                .replace("{sha1}", safeDigest("SHA-1", bytes))
+                .replace("{sha256}", safeDigest("SHA-256", bytes))
+                .replace("{worldName}", gameplay.worldName())
+                .replace("{world}", gameplay.worldName())
+                .replace("{serverName}", gameplay.serverName())
+                .replace("{server}", gameplay.serverName())
+                .replace("{serverAddress}", gameplay.serverAddress())
+                .replace("{serverIp}", gameplay.serverAddress())
+                .replace("{dimension}", gameplay.dimension())
+                .replace("{seed}", gameplay.seed())
+                .replace("{x}", gameplay.blockX())
+                .replace("{y}", gameplay.blockY())
+                .replace("{z}", gameplay.blockZ())
+                .replace("{blockX}", gameplay.blockX())
+                .replace("{blockY}", gameplay.blockY())
+                .replace("{blockZ}", gameplay.blockZ())
+                .replace("{playerX}", gameplay.playerX())
+                .replace("{playerY}", gameplay.playerY())
+                .replace("{playerZ}", gameplay.playerZ())
+                .replace("{coords}", gameplay.coords())
+                .replace("{worldTime}", gameplay.worldTime())
+                .replace("{dayTime}", gameplay.dayTime())
+                .replace("{timeOfDay}", gameplay.timeOfDay());
+        if (responseBody != null) {
+            expanded = expandResponsePlaceholders(expanded, responseBody);
+        }
+        return expanded;
+    }
+
+    private record GameplayPlaceholders(
+            String worldName,
+            String serverName,
+            String serverAddress,
+            String dimension,
+            String seed,
+            String blockX,
+            String blockY,
+            String blockZ,
+            String playerX,
+            String playerY,
+            String playerZ,
+            String coords,
+            String worldTime,
+            String dayTime,
+            String timeOfDay) {
+        private static GameplayPlaceholders empty() {
+            return new GameplayPlaceholders("", "", "", "", "", "", "", "", "", "", "", "", "", "", "");
+        }
+    }
+
+    private static GameplayPlaceholders gameplayPlaceholders() {
+        try {
+            Minecraft client = Minecraft.getInstance();
+            if (client == null || client.player == null || client.level == null || hasOpenScreen(client)) {
+                return GameplayPlaceholders.empty();
+            }
+
+            net.minecraft.core.BlockPos blockPos = client.player.blockPosition();
+            String blockX = String.valueOf(blockPos.getX());
+            String blockY = String.valueOf(blockPos.getY());
+            String blockZ = String.valueOf(blockPos.getZ());
+            String playerX = String.format(java.util.Locale.ROOT, "%.2f", client.player.getX());
+            String playerY = String.format(java.util.Locale.ROOT, "%.2f", client.player.getY());
+            String playerZ = String.format(java.util.Locale.ROOT, "%.2f", client.player.getZ());
+            long worldTicks = levelTime(client.level, "getGameTime", "gameTime");
+            long worldDays = worldTicks / 24000L;
+            long dayTime = levelTime(client.level, "getDayTime", "dayTime");
+            return new GameplayPlaceholders(
+                    singleplayerWorldName(client),
+                    serverDataString(client, "name"),
+                    serverDataString(client, "ip"),
+                    dimensionString(client.level.dimension()),
+                    singleplayerSeed(client),
+                    blockX,
+                    blockY,
+                    blockZ,
+                    playerX,
+                    playerY,
+                    playerZ,
+                    blockX + "," + blockY + "," + blockZ,
+                    String.valueOf(worldDays),
+                    String.valueOf(dayTime),
+                    formatMinecraftTime(dayTime));
+        } catch (Exception ignored) {
+            return GameplayPlaceholders.empty();
+        }
+    }
+
+    private static String singleplayerWorldName(Minecraft client) {
+        Object server = callNoArg(client, "getSingleplayerServer");
+        Object worldData = callNoArg(server, "getWorldData");
+        Object levelName = callNoArg(worldData, "getLevelName");
+        return levelName == null ? "" : String.valueOf(levelName);
+    }
+
+    private static String singleplayerSeed(Minecraft client) {
+        Object server = callNoArg(client, "getSingleplayerServer");
+        Object overworld = callNoArg(server, "overworld");
+        String levelSeed = seedString(callNoArg(overworld, "getSeed"));
+        if (!levelSeed.isBlank()) return levelSeed;
+
+        Object worldData = callNoArg(server, "getWorldData");
+        Object options = callNoArg(worldData, "worldGenOptions");
+        return seedString(callNoArg(options, "seed"));
+    }
+
+    private static String serverDataString(Minecraft client, String fieldName) {
+        Object serverData = callNoArg(client, "getCurrentServer");
+        if (serverData == null) return "";
+        try {
+            Object value = serverData.getClass().getField(fieldName).get(serverData);
+            return value == null ? "" : String.valueOf(value);
+        } catch (Exception ignored) {
+            try {
+                var field = serverData.getClass().getDeclaredField(fieldName);
+                field.setAccessible(true);
+                Object value = field.get(serverData);
+                return value == null ? "" : String.valueOf(value);
+            } catch (Exception ignoredAgain) {
+                return "";
+            }
+        }
+    }
+
+    private static boolean hasOpenScreen(Minecraft client) {
+        Object screen = callNoArg(client, "screen");
+        if (screen == null) screen = callNoArg(client, "getScreen");
+        if (screen != null) return true;
+        try {
+            return client.getClass().getField("screen").get(client) != null;
+        } catch (Exception ignored) {
+            try {
+                var field = client.getClass().getDeclaredField("screen");
+                field.setAccessible(true);
+                return field.get(client) != null;
+            } catch (Exception ignoredAgain) {
+                return false;
+            }
+        }
+    }
+
+    private static String dimensionString(Object dimensionKey) {
+        Object location = callNoArg(dimensionKey, "location");
+        if (location == null) location = callNoArg(dimensionKey, "value");
+        if (location != null) return String.valueOf(location);
+        if (dimensionKey == null) return "";
+        String raw = String.valueOf(dimensionKey);
+        int slash = raw.lastIndexOf(" / ");
+        if (slash >= 0) {
+            int end = raw.indexOf(']', slash);
+            return raw.substring(slash + 3, end >= 0 ? end : raw.length());
+        }
+        return raw;
+    }
+
+    private static long levelTime(Object level, String... methodNames) {
+        for (String methodName : methodNames) {
+            Object value = callNoArg(level, methodName);
+            if (value instanceof Number number) return number.longValue();
+        }
+        return 0L;
+    }
+
+    private static Object callNoArg(Object target, String methodName) {
+        if (target == null) return null;
+        try {
+            var method = target.getClass().getMethod(methodName);
+            method.setAccessible(true);
+            return method.invoke(target);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static String seedString(Object value) {
+        if (value instanceof java.util.OptionalLong optional) {
+            return optional.isPresent() ? String.valueOf(optional.getAsLong()) : "";
+        }
+        if (value instanceof Number number) return String.valueOf(number.longValue());
+        return value == null ? "" : String.valueOf(value);
+    }
+
+    private static String formatMinecraftTime(long dayTime) {
+        long time = Math.floorMod(dayTime, 24000L);
+        int hours = (int) ((time / 1000L + 6L) % 24L);
+        int minutes = (int) ((time % 1000L) * 60L / 1000L);
+        return String.format(java.util.Locale.ROOT, "%02d:%02d", hours, minutes);
+    }
+
+    private static String expandResponsePlaceholders(String value, String responseBody) {
+        String out = value;
+        int start = out.indexOf("{response.");
+        while (start >= 0) {
+            int end = out.indexOf('}', start);
+            if (end < 0) break;
+            String path = out.substring(start + "{response.".length(), end);
+            String replacement = findJsonPath(responseBody, path);
+            if (replacement == null) replacement = "";
+            out = out.substring(0, start) + replacement + out.substring(end + 1);
+            start = out.indexOf("{response.", start + replacement.length());
+        }
+        return out;
+    }
+
+    private static String escapeJson(String value) {
+        if (value == null) return "";
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    private static String safeDigest(String algorithm, byte[] bytes) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance(algorithm);
+            return HexFormat.of().formatHex(digest.digest(bytes));
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
     private static byte[] hmac(byte[] key, String data) throws Exception {
         return hmac(key, data.getBytes(StandardCharsets.UTF_8));
     }
@@ -473,6 +972,30 @@ public final class ScreenshotUploader {
     private static String sha256Hex(byte[] bytes) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         return HexFormat.of().formatHex(digest.digest(bytes));
+    }
+
+    private static String sha1Hex(byte[] bytes) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-1");
+        return HexFormat.of().formatHex(digest.digest(bytes));
+    }
+
+    private static String findJsonPath(String payload, String path) {
+        if (payload == null || payload.isBlank() || path == null || path.isBlank()) return null;
+        try {
+            JsonElement current = JsonParser.parseString(payload);
+            for (String rawPart : path.split("\\.")) {
+                String part = rawPart.trim();
+                if (part.isEmpty()) continue;
+                if (current == null || current.isJsonNull() || !current.isJsonObject()) return null;
+                var obj = current.getAsJsonObject();
+                if (!obj.has(part)) return null;
+                current = obj.get(part);
+            }
+            if (current != null && current.isJsonPrimitive()) {
+                return current.getAsString();
+            }
+        } catch (Exception ignored) {}
+        return null;
     }
 
     private static String findUrl(String payload) {

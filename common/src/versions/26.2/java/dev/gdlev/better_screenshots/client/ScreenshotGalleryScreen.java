@@ -668,6 +668,21 @@ public class ScreenshotGalleryScreen extends Screen {
 
         super.extractRenderState(context, mouseX, mouseY, delta);
         drawActionTooltip(context, mouseX, mouseY, hoveredActionButton, false);
+        renderInstantPreviewAboveGallery(context);
+    }
+
+
+    private void renderInstantPreviewAboveGallery(GuiGraphicsExtractor context) {
+        flushGuiGraphics(context);
+        context.nextStratum();
+        ScreenshotPreviewRenderer.renderAboveScreens(context);
+    }
+
+    private void flushGuiGraphics(Object context) {
+        try {
+            context.getClass().getMethod("flush").invoke(context);
+        } catch (ReflectiveOperationException ignored) {
+        }
     }
 
     private void drawSelectedPanel(GuiGraphicsExtractor context) {

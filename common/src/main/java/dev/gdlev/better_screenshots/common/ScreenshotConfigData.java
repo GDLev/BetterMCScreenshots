@@ -1,5 +1,8 @@
 package dev.gdlev.better_screenshots.common;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Loader-independent screenshot configuration values.
  *
@@ -32,11 +35,27 @@ public class ScreenshotConfigData {
     }
 
     public enum UploadProvider {
-        DISABLED, IMGUR, S3, CUSTOM_HTTP, CATBOX
+        DISABLED, IMGUR, S3, CUSTOM_HTTP, CATBOX, IMMICH, EXTERNAL_CUSTOM
     }
 
     public enum UploadMethod {
-        POST, PUT
+        POST, PUT, PATCH
+    }
+
+    public enum UploadBodyType {
+        MULTIPART, RAW_PNG
+    }
+
+    public static class KeyValueEntry {
+        public String key = "";
+        public String value = "";
+
+        public KeyValueEntry() {}
+
+        public KeyValueEntry(String key, String value) {
+            this.key = key;
+            this.value = value;
+        }
     }
 
     public enum ActionButtonCorner {
@@ -145,6 +164,12 @@ public class ScreenshotConfigData {
     public String imgurClientId = "";
     public String imgurAccessToken = "";
 
+    public String immichBaseUrl = "";
+    public String immichApiKey = "";
+    public String immichDeviceId = "better-mc-screenshots";
+    public String immichAlbumId = "";
+    public String immichAlbumName = "";
+
     public String s3Endpoint = "";
     public String s3Region = "";
     public String s3Bucket = "";
@@ -154,12 +179,19 @@ public class ScreenshotConfigData {
 
     public String customUploadUrl = "";
     public UploadMethod customUploadMethod = UploadMethod.POST;
+    public UploadBodyType customUploadBodyType = UploadBodyType.MULTIPART;
+    public String customFileField = "file";
+    public String customResponseUrlJsonPath = "";
+    public String customFallbackUrl = "";
     public String customCookieKey = "";
     public String customCookieValue = "";
     public String customHeaderKey = "";
     public String customHeaderValue = "";
+    public List<KeyValueEntry> customHeaders = new ArrayList<>();
     public String customPostKey = "";
     public String customPostValue = "";
+    public List<KeyValueEntry> customFormFields = new ArrayList<>();
+    public String externalUploaderName = "";
 
     public boolean uiAnimationsEnabled() {
         return animationsMode == AnimationsMode.ON;

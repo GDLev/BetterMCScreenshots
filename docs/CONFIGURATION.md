@@ -107,6 +107,10 @@ Default config:
   "s3PathPrefix": "screenshots/",
   "customUploadUrl": "",
   "customUploadMethod": "POST",
+  "customUploadBodyType": "MULTIPART",
+  "customFileField": "file",
+  "customResponseUrlJsonPath": "",
+  "customFallbackUrl": "",
   "customCookieKey": "",
   "customCookieValue": "",
   "customHeaderKey": "",
@@ -215,12 +219,14 @@ Older menu layouts use the `pause26_1*` fields:
 ## Uploader options
 
 - `uploadProvider`: Upload backend to use.
-  - Allowed: `DISABLED`, `IMGUR`, `S3`, `CUSTOM_HTTP`, `CATBOX`
+  - Allowed: `DISABLED`, `IMGUR`, `S3`, `CUSTOM_HTTP`, `CATBOX`, `IMMICH`, `EXTERNAL_CUSTOM`
   - `DISABLED` means uploader is off.
 - `uploadAutoUpload`: Automatically upload newly taken screenshots.
 - `uploadChatNotification`: Show post-upload notification in chat.
 - `uploadCopyToClipboard`: Copy uploaded URL to clipboard.
   - If `uploadChatNotification` is `false`, this value is forced to `true` at load time.
+- Custom uploader profiles are loaded from `config/better_screenshots_uploaders/*.json`.
+  - See [CUSTOM_UPLOADERS.md](CUSTOM_UPLOADERS.md) for the full profile format and examples.
 
 ## Imgur provider
 
@@ -242,7 +248,13 @@ Older menu layouts use the `pause26_1*` fields:
 
 - `customUploadUrl`: Full upload endpoint URL.
 - `customUploadMethod`: HTTP method.
-  - Allowed: `POST`, `PUT`
+  - Allowed: `POST`, `PUT`, `PATCH`
+- `customUploadBodyType`: Upload body format.
+  - Allowed: `MULTIPART`, `RAW_PNG`
+- `customFileField`: Multipart field name used for the screenshot file.
+- `customResponseUrlJsonPath`: Dot-separated JSON path used to extract the uploaded URL from the response.
+- `customFallbackUrl`: URL returned when the response does not contain a usable URL.
+  - Supports upload placeholders such as `{filename}`, `{sha1}`, and `{response.id}`.
 - `customCookieKey`: Cookie name to send.
 - `customCookieValue`: Cookie value to send.
 - `customHeaderKey`: Custom header name to send.
