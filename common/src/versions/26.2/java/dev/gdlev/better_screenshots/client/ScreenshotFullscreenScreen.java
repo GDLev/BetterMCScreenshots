@@ -3,8 +3,12 @@ package dev.gdlev.better_screenshots.client;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.Component;
@@ -14,10 +18,15 @@ import org.jspecify.annotations.NonNull;
 
 import java.io.File;
 import java.nio.file.Files;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 
 public class ScreenshotFullscreenScreen extends Screen {
 
@@ -59,6 +68,9 @@ public class ScreenshotFullscreenScreen extends Screen {
     private static final long COPY_FLASH_MS = 500L;
     private static final int UPLOAD_BAR_H = 2;
     private static final long UPLOAD_STATE_HOLD_MS = 1400L;
+    private static final int META_H = 14;
+    private static final int EDIT_ICON_W = 10;
+    private static final int NAME_MAX_LENGTH = 80;
     private final int[] actionBtnX = new int[4];
     private final int[] actionBtnY = new int[4];
 
@@ -88,6 +100,7 @@ public class ScreenshotFullscreenScreen extends Screen {
     private long           navAnimStart = -1;
     private Identifier     navOldTexId  = null;
     private DynamicTexture navOldTex    = null;
+    private File           navOldFile   = null;
 
     // Arrow fade-in start timestamp
     private long imageFullyShownAt = -1;
@@ -106,6 +119,11 @@ public class ScreenshotFullscreenScreen extends Screen {
     private long uploadClearAtMs = 0L;
     private float copyFlashAlpha = 0f;
     private long copyFlashLastFrameMs = -1L;
+    private EditBox nameEditBox;
+    private boolean editingName = false;
+    private int lastMetaX = 0;
+    private int lastMetaY = 0;
+    private int lastMetaW = 0;
 
     // ── Constructor ───────────────────────────────────────────────────────────
 
@@ -175,6 +193,8 @@ public class ScreenshotFullscreenScreen extends Screen {
         resetUploadOverlay();
         copyFlashAlpha    = 0f;
         copyFlashLastFrameMs = -1L;
+        cancelNameEdit();
+        initNameEditBox();
         if (loaded && expectedTexture != null) initStartPosition();
     }
 
@@ -191,7 +211,7 @@ public class ScreenshotFullscreenScreen extends Screen {
         if (img == null || img.getPixels() == null) return;
 
         int   targetW = this.width  - MARGIN * 2;
-        int   targetH = this.height - MARGIN * 2;
+        int   targetH = this.height - MARGIN * 2 - fullscreenNameBarHeight();
         float scale   = Math.min(
                 (float) targetW / img.getPixels().getWidth(),
                 (float) targetH / img.getPixels().getHeight());
@@ -235,6 +255,7 @@ public class ScreenshotFullscreenScreen extends Screen {
 
     private void startClose() {
         if (closing) return;
+        cancelNameEdit();
         closing    = true;
         closeStart = System.currentTimeMillis();
     }
@@ -259,6 +280,7 @@ public class ScreenshotFullscreenScreen extends Screen {
 
     private void navigateTo(int direction) {
         if (navLoading) return;
+        cancelNameEdit();
         int newIndex = currentFileIndex + direction;
         if (newIndex < 0 || newIndex >= screenshotFiles.size()) return;
 
@@ -300,6 +322,7 @@ public class ScreenshotFullscreenScreen extends Screen {
     }
 
     private void deleteCurrent() {
+        cancelNameEdit();
         if (screenshotFiles.isEmpty() || currentFileIndex < 0) return;
         File file = screenshotFiles.get(currentFileIndex);
         if (file.delete()) {
@@ -353,6 +376,296 @@ public class ScreenshotFullscreenScreen extends Screen {
 
     // ── UI Helpers ────────────────────────────────────────────────────────────
 
+    private boolean fullscreenNameBarSupported() {
+        if (!ScreenshotConfig.get().fullscreenNameBar) {
+            return false;
+        }
+        try {
+            return Boolean.TRUE.equals(ScreenshotPreviewRenderer.class
+                    .getMethod("supportsFullscreenRename")
+                    .invoke(null));
+        } catch (ReflectiveOperationException ignored) {
+            return false;
+        }
+    }
+
+    private int fullscreenNameBarHeight() {
+        return fullscreenNameBarHeight(currentFile());
+    }
+
+    private int fullscreenNameBarHeight(File file) {
+        return fullscreenNameBarSupported() && file != null ? META_H : 0;
+    }
+
+    private void initNameEditBox() {
+        if (!fullscreenNameBarSupported()) return;
+        nameEditBox = new EditBox(font, 0, 0, 1, META_H - 2,
+                Component.translatable("better_screenshots.gallery.name"));
+        nameEditBox.setMaxLength(NAME_MAX_LENGTH);
+        nameEditBox.setBordered(false);
+        nameEditBox.setTextColor(0xFFE0E0E0);
+        nameEditBox.setTextShadow(false);
+        nameEditBox.setSuggestion("...");
+        nameEditBox.setVisible(false);
+        addRenderableWidget(nameEditBox);
+    }
+
+    private File currentFile() {
+        return currentFileIndex >= 0 && currentFileIndex < screenshotFiles.size()
+                ? screenshotFiles.get(currentFileIndex)
+                : null;
+    }
+
+    private void drawNameBar(
+            GuiGraphicsExtractor context,
+            int x,
+            int y,
+            int width,
+            int mouseX,
+            int mouseY) {
+        drawNameBar(context, x, y, width, mouseX, mouseY, 255, true);
+    }
+
+    private void drawNameBar(
+            GuiGraphicsExtractor context,
+            int x,
+            int y,
+            int width,
+            int mouseX,
+            int mouseY,
+            int alpha,
+            boolean interactive) {
+        drawNameBar(context, currentFile(), x, y, width, mouseX, mouseY, alpha, interactive);
+    }
+
+    private void drawNameBar(
+            GuiGraphicsExtractor context,
+            File file,
+            int x,
+            int y,
+            int width,
+            int mouseX,
+            int mouseY,
+            int alpha,
+            boolean interactive) {
+        if (!fullscreenNameBarSupported()) {
+            if (nameEditBox != null) nameEditBox.setVisible(false);
+            return;
+        }
+        if (file == null) {
+            if (nameEditBox != null) nameEditBox.setVisible(false);
+            return;
+        }
+
+        if (interactive) {
+            lastMetaX = x;
+            lastMetaY = y;
+            lastMetaW = width;
+        }
+
+        alpha = Math.max(0, Math.min(255, alpha));
+        context.fill(x, y, x + width, y + META_H, withAlpha(0x3A3A3A, alpha));
+        context.fill(x, y, x + width, y + 1, withAlpha(0x505050, alpha));
+
+        if (interactive) {
+            updateNameEditBoxBounds();
+        } else if (nameEditBox != null) {
+            nameEditBox.setVisible(false);
+        }
+        if (!editingName) {
+            String customName = displayName(file);
+            String label = customName != null ? customName : formatScreenshotTime(file.lastModified());
+            int labelW = width - EDIT_ICON_W - 10;
+            if (font.width(label) > labelW) {
+                String clipped = label;
+                while (font.width(clipped + "...") > labelW && !clipped.isEmpty()) {
+                    clipped = clipped.substring(0, clipped.length() - 1);
+                }
+                label = clipped + "...";
+            }
+            context.text(font, Component.literal(label), x + 4, y + 4, withAlpha(0xE0E0E0, alpha));
+        }
+
+        int iconColor = interactive && isEditIconHit(mouseX, mouseY) ? 0xFFFFFF : 0xBDBDBD;
+        iconColor = withAlpha(iconColor, alpha);
+        context.text(font, Component.literal("✎"), x + width - EDIT_ICON_W - 1, y + 3, iconColor);
+    }
+
+    private int withAlpha(int rgb, int alpha) {
+        return (Math.max(0, Math.min(255, alpha)) << 24) | (rgb & 0x00FFFFFF);
+    }
+
+    private void drawFullscreenFrame(
+            GuiGraphicsExtractor context,
+            int x,
+            int y,
+            int width,
+            int imageHeight,
+            File file,
+            int alpha) {
+        int totalHeight = imageHeight + fullscreenNameBarHeight(file);
+        int left = x - 1;
+        int top = y - 1;
+        int right = x + width + 1;
+        int bottom = y + totalHeight + 1;
+        if (right <= left || bottom <= top) return;
+
+        int color = withAlpha(0x555555, alpha);
+        context.fill(left, top, right, top + 1, color);
+        context.fill(left, bottom - 1, right, bottom, color);
+        context.fill(left, top + 1, left + 1, bottom - 1, color);
+        context.fill(right - 1, top + 1, right, bottom - 1, color);
+    }
+
+    private void startNameEdit() {
+        if (!fullscreenNameBarSupported() || currentFile() == null) return;
+        editingName = true;
+        if (nameEditBox == null) initNameEditBox();
+        if (nameEditBox == null) return;
+        nameEditBox.setValue("");
+        nameEditBox.setFocused(true);
+        nameEditBox.setCanLoseFocus(false);
+        nameEditBox.moveCursorToEnd(false);
+        this.setFocused(nameEditBox);
+        updateNameEditBoxBounds();
+    }
+
+    private void acceptNameEdit() {
+        if (!editingName || nameEditBox == null) {
+            cancelNameEdit();
+            return;
+        }
+        String value = nameEditBox.getValue().trim();
+        if (!value.isEmpty()) {
+            renameCurrentScreenshot(value);
+        }
+        cancelNameEdit();
+    }
+
+    private void cancelNameEdit() {
+        editingName = false;
+        if (nameEditBox != null) {
+            nameEditBox.setValue("");
+            nameEditBox.setFocused(false);
+            nameEditBox.setCanLoseFocus(true);
+            nameEditBox.setVisible(false);
+        }
+        if (this.getFocused() == nameEditBox) {
+            this.setFocused(null);
+        }
+    }
+
+    private void renameCurrentScreenshot(String requestedName) {
+        File source = currentFile();
+        if (source == null) return;
+        File parentDir = source.getParentFile();
+        if (parentDir == null) return;
+
+        String baseName = sanitizeScreenshotName(requestedName);
+        if (baseName.isEmpty()) return;
+
+        File target = uniqueScreenshotFile(parentDir, baseName, source);
+        if (source.equals(target)) return;
+
+        try {
+            Files.move(source.toPath(), target.toPath());
+        } catch (Exception ignored) {
+            return;
+        }
+
+        screenshotFiles.set(currentFileIndex, target);
+        if (parent instanceof ScreenshotGalleryScreen gallery) {
+            gallery.refreshAfterExternalChange();
+        } else if (parent instanceof ScreenshotConfigScreen config) {
+            config.refreshAfterExternalChange();
+        }
+    }
+
+    private String sanitizeScreenshotName(String name) {
+        String sanitized = name.trim()
+                .replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_")
+                .replaceAll("\\s+", " ");
+        while (sanitized.endsWith(".") || sanitized.endsWith(" ")) {
+            sanitized = sanitized.substring(0, sanitized.length() - 1);
+        }
+        if (sanitized.toLowerCase(Locale.ROOT).endsWith(".png")) {
+            sanitized = sanitized.substring(0, sanitized.length() - 4).trim();
+        }
+        if (sanitized.length() > NAME_MAX_LENGTH) {
+            sanitized = sanitized.substring(0, NAME_MAX_LENGTH).trim();
+        }
+        return sanitized;
+    }
+
+    private File uniqueScreenshotFile(File dir, String baseName, File source) {
+        File target = new File(dir, baseName + ".png");
+        if (target.equals(source) || !target.exists()) {
+            return target;
+        }
+
+        for (int i = 2; i < 1000; i++) {
+            target = new File(dir, baseName + " (" + i + ").png");
+            if (target.equals(source) || !target.exists()) {
+                return target;
+            }
+        }
+        return new File(dir, baseName + " (" + System.currentTimeMillis() + ").png");
+    }
+
+    private String displayName(File file) {
+        String fileName = file.getName();
+        if (isDefaultScreenshotName(fileName)) {
+            return null;
+        }
+        if (fileName.toLowerCase(Locale.ROOT).endsWith(".png")) {
+            return fileName.substring(0, fileName.length() - 4);
+        }
+        return fileName;
+    }
+
+    private boolean isDefaultScreenshotName(String fileName) {
+        return fileName.matches("\\d{4}-\\d{2}-\\d{2}_\\d{2}\\.\\d{2}\\.\\d{2}(?:_\\d+)?\\.png");
+    }
+
+    private static String formatScreenshotTime(long lastModified) {
+        ZoneId zone = ZoneId.systemDefault();
+        Instant instant = Instant.ofEpochMilli(lastModified);
+        LocalDate shotDate = instant.atZone(zone).toLocalDate();
+        LocalDate today = LocalDate.now(zone);
+        String time = DateTimeFormatter.ofPattern("HH:mm").format(instant.atZone(zone));
+
+        if (shotDate.equals(today)) {
+            return Component.translatable("better_screenshots.gallery.time.today", time).getString();
+        }
+        if (shotDate.equals(today.minusDays(1))) {
+            return Component.translatable("better_screenshots.gallery.time.yesterday", time).getString();
+        }
+        return DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").format(instant.atZone(zone));
+    }
+
+    private boolean updateNameEditBoxBounds() {
+        if (!editingName || nameEditBox == null || lastMetaW <= 0) {
+            if (nameEditBox != null) nameEditBox.setVisible(false);
+            return false;
+        }
+        nameEditBox.setVisible(true);
+        nameEditBox.setX(lastMetaX + 4);
+        nameEditBox.setY(lastMetaY + 3);
+        nameEditBox.setWidth(Math.max(1, lastMetaW - EDIT_ICON_W - 8));
+        nameEditBox.setHeight(META_H - 4);
+        return true;
+    }
+
+    private boolean isEditIconHit(double mouseX, double mouseY) {
+        int iconX = lastMetaX + lastMetaW - EDIT_ICON_W - 3;
+        return fullscreenNameBarSupported()
+                && currentFile() != null
+                && mouseX >= iconX
+                && mouseX <= iconX + EDIT_ICON_W
+                && mouseY >= lastMetaY + 1
+                && mouseY <= lastMetaY + META_H - 1;
+    }
+
     private void drawHintText(GuiGraphicsExtractor context) {
         context.centeredText(font,
                 Component.translatable("better_screenshots.fullscreen.hint"),
@@ -400,17 +713,7 @@ public class ScreenshotFullscreenScreen extends Screen {
             boolean closeFirst) {
         if (action < 0 || !ScreenshotConfig.get().actionButtonTooltips) return;
         Component text = actionTooltip(action, closeFirst);
-        int textW = font.width(text);
-        int x = Math.min((int) mouseX + 10, this.width - textW - 8);
-        int y = Math.min((int) mouseY + 10, this.height - 16);
-        x = Math.max(4, x);
-        y = Math.max(4, y);
-        context.fill(x - 3, y - 3, x + textW + 3, y + 11, 0xF0101010);
-        context.fill(x - 3, y - 3, x + textW + 3, y - 2, 0xFF555555);
-        context.fill(x - 3, y + 10, x + textW + 3, y + 11, 0xFF555555);
-        context.fill(x - 3, y - 3, x - 2, y + 11, 0xFF555555);
-        context.fill(x + textW + 2, y - 3, x + textW + 3, y + 11, 0xFF555555);
-        context.centeredText(font, text, x + textW / 2, y, 0xFFFFFFFF);
+        context.setTooltipForNextFrame(font, text, (int) mouseX, (int) mouseY);
     }
 
     private Component actionTooltip(int action, boolean closeFirst) {
@@ -581,7 +884,7 @@ public class ScreenshotFullscreenScreen extends Screen {
                 return;
             }
             int   tW      = this.width  - MARGIN * 2;
-            int   tH      = this.height - MARGIN * 2;
+            int   tH      = this.height - MARGIN * 2 - fullscreenNameBarHeight();
             float sc      = Math.min(
                     (float) tW / refTex.getPixels().getWidth(),
                     (float) tH / refTex.getPixels().getHeight());
@@ -597,6 +900,10 @@ public class ScreenshotFullscreenScreen extends Screen {
                         targetX + oldOffsetX, targetY,
                         0f, 0f, targetW, targetH, targetW, targetH,
                         (oldAlphaI << 24) | 0x00FFFFFF);
+                drawNameBar(context, navOldFile, targetX + oldOffsetX, targetY + targetH,
+                        targetW, mouseX, mouseY, oldAlphaI, false);
+                drawFullscreenFrame(context, targetX + oldOffsetX, targetY,
+                        targetW, targetH, navOldFile, oldAlphaI);
             }
 
             if (loaded && expectedTexture != null) {
@@ -606,6 +913,10 @@ public class ScreenshotFullscreenScreen extends Screen {
                         targetX + newOffsetX, targetY,
                         0f, 0f, targetW, targetH, targetW, targetH,
                         (newAlphaI << 24) | 0x00FFFFFF);
+                drawNameBar(context, targetX + newOffsetX, targetY + targetH,
+                        targetW, mouseX, mouseY, newAlphaI, false);
+                drawFullscreenFrame(context, targetX + newOffsetX, targetY,
+                        targetW, targetH, currentFile(), newAlphaI);
             }
 
             if (!useAnim || navT >= 1f) {
@@ -630,7 +941,7 @@ public class ScreenshotFullscreenScreen extends Screen {
         // ── Compute target rect ───────────────────────────────────────────────
         var   img     = expectedTexture;
         int   tW      = this.width  - MARGIN * 2;
-        int   tH      = this.height - MARGIN * 2;
+        int   tH      = this.height - MARGIN * 2 - fullscreenNameBarHeight();
         float sc      = Math.min(
                 (float) tW / img.getPixels().getWidth(),
                 (float) tH / img.getPixels().getHeight());
@@ -661,6 +972,10 @@ public class ScreenshotFullscreenScreen extends Screen {
                 context.blit(RenderPipelines.GUI_TEXTURED, getTexId(),
                         lastCurX, imgY, 0f, 0f, lastCurW, lastCurH, lastCurW, lastCurH,
                         (imgAlphaI << 24) | 0x00FFFFFF);
+                drawNameBar(context, currentFile(), lastCurX, imgY + lastCurH,
+                        lastCurW, mouseX, mouseY, imgAlphaI, false);
+                drawFullscreenFrame(context, lastCurX, imgY,
+                        lastCurW, lastCurH, currentFile(), imgAlphaI);
             }
             return;
         }
@@ -676,6 +991,8 @@ public class ScreenshotFullscreenScreen extends Screen {
                     targetX, targetY, 0f, 0f, targetW, targetH, targetW, targetH);
             drawCopyFlashFrame(context, targetX, targetY, targetW, targetH, now);
             drawUploadProgressBar(context, targetX, targetY, targetW, targetH);
+            drawNameBar(context, targetX, targetY + targetH, targetW, mouseX, mouseY);
+            drawFullscreenFrame(context, targetX, targetY, targetW, targetH, currentFile(), 255);
             drawArrows(context, targetX, targetY, targetW, targetH, mouseX, mouseY);
             drawActionButtons(context, targetX, targetY, targetW, targetH, mouseX, mouseY);
             drawHintText(context);
@@ -707,6 +1024,10 @@ public class ScreenshotFullscreenScreen extends Screen {
         context.blit(RenderPipelines.GUI_TEXTURED, getTexId(),
                 curX, curY, 0f, 0f, curW, curH, curW, curH);
         drawCopyFlashFrame(context, curX, curY, curW, curH, now);
+        drawNameBar(context, curX, curY + curH, curW, mouseX, mouseY,
+                (int)(Math.max(0f, Math.min(1f, rawProgress)) * 255), rawProgress >= 1.0f);
+        drawFullscreenFrame(context, curX, curY, curW, curH, currentFile(),
+                (int)(Math.max(0f, Math.min(1f, rawProgress)) * 255));
 
         if (rawProgress >= 1.0f) {
             if (imageFullyShownAt < 0) imageFullyShownAt = now;
@@ -758,7 +1079,7 @@ public class ScreenshotFullscreenScreen extends Screen {
         if (img == null || img.getPixels() == null) return false;
 
         int   tW     = this.width  - MARGIN * 2;
-        int   tH     = this.height - MARGIN * 2;
+        int   tH     = this.height - MARGIN * 2 - fullscreenNameBarHeight();
         float sc     = Math.min(
                 (float) tW / img.getPixels().getWidth(),
                 (float) tH / img.getPixels().getHeight());
@@ -766,6 +1087,16 @@ public class ScreenshotFullscreenScreen extends Screen {
         int targetH  = (int)(img.getPixels().getHeight() * sc);
         int targetX  = (this.width  - targetW) / 2;
         int targetY  = (this.height - targetH) / 2;
+
+        if (fullscreenNameBarSupported() && currentFile() != null) {
+            lastMetaX = targetX;
+            lastMetaY = targetY + targetH;
+            lastMetaW = targetW;
+            if (isEditIconHit(mouseX, mouseY)) {
+                startNameEdit();
+                return true;
+            }
+        }
 
         boolean showUploadAction = ScreenshotUploader.isUploaderEnabled();
         boolean[] visible =
@@ -821,8 +1152,29 @@ public class ScreenshotFullscreenScreen extends Screen {
     }
 
     @Override
+    public boolean mouseClicked(MouseButtonEvent input, boolean consumed) {
+        if (input.button() == 0 && handleNavClick(input.x(), input.y())) return true;
+        return super.mouseClicked(input, consumed);
+    }
+
+    @Override
     public boolean keyPressed(net.minecraft.client.input.KeyEvent input) {
         int key = input.key();
+
+        if (editingName) {
+            if (key == 257 || key == 335) { // Enter / keypad Enter
+                acceptNameEdit();
+                return true;
+            }
+            if (key == 256) { // ESC
+                cancelNameEdit();
+                return true;
+            }
+            if (nameEditBox != null) {
+                nameEditBox.keyPressed(input);
+            }
+            return true;
+        }
 
         if (!closing && loaded && expectedTexture != null
                 && screenshotFiles.size() > 1 && currentFileIndex >= 0) {
@@ -835,6 +1187,15 @@ public class ScreenshotFullscreenScreen extends Screen {
             return true;
         }
         return super.keyPressed(input);
+    }
+
+    @Override
+    public boolean charTyped(CharacterEvent input) {
+        if (editingName && nameEditBox != null) {
+            nameEditBox.charTyped(input);
+            return true;
+        }
+        return super.charTyped(input);
     }
 
     @Override
@@ -997,6 +1358,7 @@ public class ScreenshotFullscreenScreen extends Screen {
 
     private void captureNavOldTextureSnapshot() {
         clearNavOldTexture();
+        navOldFile = currentFile();
         if (expectedTexture == null || expectedTexture.getPixels() == null) return;
         NativeImage src = expectedTexture.getPixels();
         if (src.getWidth() <= 0 || src.getHeight() <= 0) return;
@@ -1019,5 +1381,6 @@ public class ScreenshotFullscreenScreen extends Screen {
             navOldTex = null;
         }
         navOldTexId = null;
+        navOldFile = null;
     }
 }

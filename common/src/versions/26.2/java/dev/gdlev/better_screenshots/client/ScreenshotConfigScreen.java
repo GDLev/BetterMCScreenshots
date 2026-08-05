@@ -219,17 +219,30 @@ public class ScreenshotConfigScreen extends Screen {
                             loadThumbnails();
                         })));
 
+        settingsWidgets.add(addRenderableWidget(CycleButton.builder(
+                        (Boolean enabled) -> Component.translatable(enabled
+                                ? "better_screenshots.config.fullscreen_name_bar.on"
+                                : "better_screenshots.config.fullscreen_name_bar.off"),
+                        ScreenshotConfig.get().fullscreenNameBar)
+                .withValues(Boolean.TRUE, Boolean.FALSE)
+                .create(lx, ty + 14 + GAP * 8, COL_W, BTN_H,
+                        Component.translatable("better_screenshots.config.fullscreen_name_bar"),
+                        (btn, val) -> {
+                            ScreenshotConfig.get().fullscreenNameBar = val;
+                            ScreenshotConfig.save();
+                        })));
+
         settingsWidgets.add(addRenderableWidget(Button.builder(
                         Component.translatable("better_screenshots.config.uploader.configure"),
                         btn -> dev.gdlev.better_screenshots.client.MinecraftCompat.setScreen(minecraft, new UploaderConfigScreen(this)))
-                .bounds(lx, ty + 14 + GAP * 8, COL_W, BTN_H)
+                .bounds(lx, ty + 14 + GAP * 9, COL_W, BTN_H)
                 .build()));
 
         settingsWidgets.add(addRenderableWidget(Button.builder(
                         Component.translatable("better_screenshots.config.actions.configure"),
                         btn -> dev.gdlev.better_screenshots.client.MinecraftCompat.setScreen(
                                 minecraft, new ActionButtonConfigScreen(this)))
-                .bounds(lx, ty + 14 + GAP * 9, COL_W, BTN_H)
+                .bounds(lx, ty + 14 + GAP * 10, COL_W, BTN_H)
                 .build()));
 
         // Back
@@ -454,17 +467,7 @@ public class ScreenshotConfigScreen extends Screen {
             boolean closeFirst) {
         if (action < 0 || !ScreenshotConfig.get().actionButtonTooltips) return;
         Component text = actionTooltip(action, closeFirst);
-        int textW = font.width(text);
-        int x = Math.min((int) mouseX + 10, this.width - textW - 8);
-        int y = Math.min((int) mouseY + 10, this.height - 16);
-        x = Math.max(4, x);
-        y = Math.max(4, y);
-        context.fill(x - 3, y - 3, x + textW + 3, y + 11, 0xF0101010);
-        context.fill(x - 3, y - 3, x + textW + 3, y - 2, 0xFF555555);
-        context.fill(x - 3, y + 10, x + textW + 3, y + 11, 0xFF555555);
-        context.fill(x - 3, y - 3, x - 2, y + 11, 0xFF555555);
-        context.fill(x + textW + 2, y - 3, x + textW + 3, y + 11, 0xFF555555);
-        context.centeredText(font, text, x + textW / 2, y, 0xFFFFFFFF);
+        context.setTooltipForNextFrame(font, text, (int) mouseX, (int) mouseY);
     }
 
     private Component actionTooltip(int action, boolean closeFirst) {

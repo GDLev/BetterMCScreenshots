@@ -81,19 +81,23 @@ public class ScreenshotConfigData {
     public boolean hideMiniPreviewActionButtons = false;
     public boolean actionButtonTooltips = true;
     public boolean pixelatedPreviews = false;
+    public boolean fullscreenNameBar = true;
 
     public ActionButtonCorner miniPreviewShowCorner = ActionButtonCorner.TOP_RIGHT;
     public ActionButtonCorner miniPreviewCopyCorner = ActionButtonCorner.TOP_RIGHT;
     public ActionButtonCorner miniPreviewUploadCorner = ActionButtonCorner.TOP_RIGHT;
     public ActionButtonCorner miniPreviewDeleteCorner = ActionButtonCorner.TOP_RIGHT;
+    public ActionButtonCorner miniPreviewRenameCorner = ActionButtonCorner.TOP_RIGHT;
     public boolean miniPreviewShowVisible = true;
     public boolean miniPreviewCopyVisible = true;
     public boolean miniPreviewUploadVisible = true;
     public boolean miniPreviewDeleteVisible = true;
+    public boolean miniPreviewRenameVisible = false;
     public int miniPreviewShowOrder = 0;
     public int miniPreviewCopyOrder = 1;
     public int miniPreviewUploadOrder = 2;
     public int miniPreviewDeleteOrder = 3;
+    public int miniPreviewRenameOrder = 4;
 
     public ActionButtonCorner galleryShowCorner = ActionButtonCorner.TOP_RIGHT;
     public ActionButtonCorner galleryCopyCorner = ActionButtonCorner.TOP_RIGHT;

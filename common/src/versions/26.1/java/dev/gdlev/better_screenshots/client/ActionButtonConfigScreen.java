@@ -47,6 +47,10 @@ public class ActionButtonConfigScreen extends Screen {
             Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/delete.png");
     private static final Identifier ICON_DELETE_H =
             Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/delete_hover.png");
+    private static final Identifier ICON_RENAME =
+            Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/rename.png");
+    private static final Identifier ICON_RENAME_H =
+            Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/rename_hover.png");
     private static final Identifier ICON_CLOSE =
             Identifier.fromNamespaceAndPath("better_screenshots", "textures/gui/close.png");
     private static final Identifier ICON_CLOSE_H =
@@ -74,17 +78,18 @@ public class ActionButtonConfigScreen extends Screen {
 
     private final Screen parent;
     private final Button[] modeButtons = new Button[PreviewMode.values().length];
-    private final int[] actionX = new int[4];
-    private final int[] actionY = new int[4];
-    private final int[] targetX = new int[4];
-    private final int[] targetY = new int[4];
-    private final int[] trayActionX = new int[4];
-    private final int[] trayActionY = new int[4];
+    private static final int MAX_ACTIONS = 5;
+    private final int[] actionX = new int[MAX_ACTIONS];
+    private final int[] actionY = new int[MAX_ACTIONS];
+    private final int[] targetX = new int[MAX_ACTIONS];
+    private final int[] targetY = new int[MAX_ACTIONS];
+    private final int[] trayActionX = new int[MAX_ACTIONS];
+    private final int[] trayActionY = new int[MAX_ACTIONS];
     private final double[] animatedX = {
-            Double.NaN, Double.NaN, Double.NaN, Double.NaN
+            Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN
     };
     private final double[] animatedY = {
-            Double.NaN, Double.NaN, Double.NaN, Double.NaN
+            Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN
     };
 
     private PreviewMode mode = PreviewMode.MINI_PREVIEW;
@@ -203,9 +208,19 @@ public class ActionButtonConfigScreen extends Screen {
     }
 
     private int actionCount() {
-        return mode == PreviewMode.PAUSE_MENU
-                ? PauseMenuButtonLayout.ACTION_COUNT
-                : 4;
+        if (mode == PreviewMode.PAUSE_MENU) return PauseMenuButtonLayout.ACTION_COUNT;
+        if (mode == PreviewMode.MINI_PREVIEW && supportsMiniPreviewRename()) return 5;
+        return 4;
+    }
+
+    private boolean supportsMiniPreviewRename() {
+        try {
+            return Boolean.TRUE.equals(ScreenshotPreviewRenderer.class
+                    .getMethod("supportsMiniPreviewRename")
+                    .invoke(null));
+        } catch (ReflectiveOperationException ignored) {
+            return false;
+        }
     }
 
     @Override
@@ -407,7 +422,7 @@ public class ActionButtonConfigScreen extends Screen {
         }
 
         ActionButtonLayout.arrange(
-                targetX, targetY, corners, order, visible, 4,
+                targetX, targetY, corners, order, visible, actionCount(),
                 previewX, previewY, previewW, previewHForActions(),
                 BUTTON_W, BUTTON_H, BUTTON_GAP, PREVIEW_MARGIN);
     }
@@ -699,13 +714,7 @@ public class ActionButtonConfigScreen extends Screen {
             int mouseX,
             int mouseY) {
         Component label = actionLabel(action);
-        int labelW = font.width(label) + 8;
-        int labelX = Math.max(panelX() + SIDEBAR_W + 4,
-                Math.min(mouseX + 8, panelX() + panelW() - labelW - 6));
-        int labelY = Math.max(panelY() + 26,
-                Math.min(mouseY + 8, panelY() + panelH() - 18));
-        context.fill(labelX - 2, labelY - 2, labelX + labelW, labelY + 11, 0xEE111111);
-        context.text(font, label, labelX + 2, labelY, 0xFFFFFFFF, false);
+        context.setTooltipForNextFrame(font, label, mouseX, mouseY);
     }
 
     @Override
@@ -991,7 +1000,8 @@ public class ActionButtonConfigScreen extends Screen {
                     safe(config.miniPreviewShowCorner, ActionButtonCorner.TOP_RIGHT),
                     safe(config.miniPreviewCopyCorner, ActionButtonCorner.TOP_RIGHT),
                     safe(config.miniPreviewUploadCorner, ActionButtonCorner.TOP_RIGHT),
-                    safe(config.miniPreviewDeleteCorner, ActionButtonCorner.TOP_RIGHT)
+                    safe(config.miniPreviewDeleteCorner, ActionButtonCorner.TOP_RIGHT),
+                    safe(config.miniPreviewRenameCorner, ActionButtonCorner.TOP_RIGHT)
             };
             case GALLERY_THUMBNAIL -> new ActionButtonCorner[] {
                     safe(config.galleryShowCorner, ActionButtonCorner.TOP_RIGHT),
@@ -1022,7 +1032,8 @@ public class ActionButtonConfigScreen extends Screen {
                     config.miniPreviewShowOrder,
                     config.miniPreviewCopyOrder,
                     config.miniPreviewUploadOrder,
-                    config.miniPreviewDeleteOrder
+                    config.miniPreviewDeleteOrder,
+                    config.miniPreviewRenameOrder
             };
             case GALLERY_THUMBNAIL -> new int[] {
                     config.galleryShowOrder,
@@ -1053,7 +1064,8 @@ public class ActionButtonConfigScreen extends Screen {
                     config.miniPreviewShowVisible,
                     config.miniPreviewCopyVisible,
                     config.miniPreviewUploadVisible,
-                    config.miniPreviewDeleteVisible
+                    config.miniPreviewDeleteVisible,
+                    config.miniPreviewRenameVisible
             };
             case GALLERY_THUMBNAIL -> new boolean[] {
                     config.galleryShowVisible,
@@ -1088,6 +1100,7 @@ public class ActionButtonConfigScreen extends Screen {
                 if (action == 1) config.miniPreviewCopyCorner = corner;
                 if (action == 2) config.miniPreviewUploadCorner = corner;
                 if (action == 3) config.miniPreviewDeleteCorner = corner;
+                if (action == 4) config.miniPreviewRenameCorner = corner;
             }
             case GALLERY_THUMBNAIL -> {
                 if (action == 0) config.galleryShowCorner = corner;
@@ -1128,6 +1141,7 @@ public class ActionButtonConfigScreen extends Screen {
                 if (action == 1) config.miniPreviewCopyVisible = visible;
                 if (action == 2) config.miniPreviewUploadVisible = visible;
                 if (action == 3) config.miniPreviewDeleteVisible = visible;
+                if (action == 4) config.miniPreviewRenameVisible = visible;
             }
             case GALLERY_THUMBNAIL -> {
                 if (action == 0) config.galleryShowVisible = visible;
@@ -1163,6 +1177,7 @@ public class ActionButtonConfigScreen extends Screen {
                 if (action == 1) config.miniPreviewCopyOrder = order;
                 if (action == 2) config.miniPreviewUploadOrder = order;
                 if (action == 3) config.miniPreviewDeleteOrder = order;
+                if (action == 4) config.miniPreviewRenameOrder = order;
             }
             case GALLERY_THUMBNAIL -> {
                 if (action == 0) config.galleryShowOrder = order;
@@ -1212,7 +1227,8 @@ public class ActionButtonConfigScreen extends Screen {
                 first,
                 hovered ? ICON_COPY_H : ICON_COPY,
                 hovered ? ICON_UPLOAD_H : ICON_UPLOAD,
-                hovered ? ICON_DELETE_H : ICON_DELETE
+                hovered ? ICON_DELETE_H : ICON_DELETE,
+                hovered ? ICON_RENAME_H : ICON_RENAME
         };
     }
 
@@ -1232,6 +1248,7 @@ public class ActionButtonConfigScreen extends Screen {
         return Component.translatable(switch (action) {
             case 1 -> "better_screenshots.config.actions.action.copy";
             case 2 -> "better_screenshots.config.actions.action.upload";
+            case 4 -> "better_screenshots.config.actions.action.rename";
             default -> "better_screenshots.config.actions.action.delete";
         });
     }

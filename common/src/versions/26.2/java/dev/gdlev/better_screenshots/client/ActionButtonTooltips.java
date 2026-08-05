@@ -18,17 +18,7 @@ final class ActionButtonTooltips {
             boolean closeFirst) {
         if (action < 0 || !ScreenshotConfig.get().actionButtonTooltips) return;
         Component text = label(action, closeFirst);
-        int textW = font.width(text);
-        int x = Math.min((int) mouseX + 10, screenW - textW - 8);
-        int y = Math.min((int) mouseY + 10, screenH - 16);
-        x = Math.max(4, x);
-        y = Math.max(4, y);
-        context.fill(x - 3, y - 3, x + textW + 3, y + 11, 0xF0101010);
-        context.fill(x - 3, y - 3, x + textW + 3, y - 2, 0xFF555555);
-        context.fill(x - 3, y + 10, x + textW + 3, y + 11, 0xFF555555);
-        context.fill(x - 3, y - 3, x - 2, y + 11, 0xFF555555);
-        context.fill(x + textW + 2, y - 3, x + textW + 3, y + 11, 0xFF555555);
-        context.text(font, text, x, y, 0xFFFFFFFF, false);
+        context.setTooltipForNextFrame(font, text, (int) mouseX, (int) mouseY);
     }
 
     private static Component label(int action, boolean closeFirst) {
@@ -42,4 +32,5 @@ final class ActionButtonTooltips {
             default -> "better_screenshots.config.actions.configure";
         });
     }
+
 }

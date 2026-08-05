@@ -7,6 +7,11 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.network.chat.Component;
+import org.lwjgl.glfw.GLFW;
+
+import java.util.Locale;
+
 import net.minecraft.resources.ResourceLocation;
 
 public class ScreenshotPreviewRenderer {
@@ -112,6 +117,9 @@ public class ScreenshotPreviewRenderer {
     private static final int BTN_W   = 8;
     private static final int BTN_H   = 10;
     private static final int BTN_GAP = 0;
+    private static final int ACTION_COUNT = 5;
+    private static final int NAME_META_H = 14;
+    private static final int NAME_MAX_LENGTH = 80;
 
     private static final ResourceLocation ICON_SHOW    = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/show.png");
     private static final ResourceLocation ICON_SHOW_H  = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/show_hover.png");
@@ -121,10 +129,12 @@ public class ScreenshotPreviewRenderer {
     private static final ResourceLocation ICON_UPLOAD_H= ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/upload_hover.png");
     private static final ResourceLocation ICON_DELETE  = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/delete.png");
     private static final ResourceLocation ICON_DELETE_H= ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/delete_hover.png");
+    private static final ResourceLocation ICON_RENAME  = ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/rename.png");
+    private static final ResourceLocation ICON_RENAME_H= ResourceLocation.fromNamespaceAndPath("better_screenshots", "textures/gui/rename_hover.png");
 
     private static int       hoveredButton = -1;
-    private static final int[] btnX        = new int[4];
-    private static final int[] btnY        = new int[4];
+    private static final int[] btnX        = new int[ACTION_COUNT];
+    private static final int[] btnY        = new int[ACTION_COUNT];
     private static final long DOUBLE_CLICK_MS = 300L;
     private static int previewHitX = -100;
     private static int previewHitY = -100;
@@ -146,12 +156,19 @@ public class ScreenshotPreviewRenderer {
 
     public static DynamicTexture getPreviewTexture() { return previewTexture; }
 
+    public static boolean supportsMiniPreviewRename() { return true; }
+
+    public static boolean supportsFullscreenRename() { return true; }
+
     private static final java.util.concurrent.ConcurrentHashMap<String, java.io.File> pendingFiles
             = new java.util.concurrent.ConcurrentHashMap<>();
     private static final java.util.concurrent.ConcurrentHashMap<String, String> uploadedUrls
             = new java.util.concurrent.ConcurrentHashMap<>();
     private static volatile String currentPreviewId = null;
     private static volatile java.io.File currentPreviewFile = null;
+    private static boolean renameEditing = false;
+    private static long renameEditStart = -1L;
+    private static final StringBuilder renameValue = new StringBuilder();
 
     public static void registerFile(String id, java.io.File file) {
         pendingFiles.put(id, file);
@@ -345,9 +362,11 @@ public class ScreenshotPreviewRenderer {
                 / previewTexture.getPixels().getWidth();
         int margin     = 10;
         boolean showUploadBar = uploadEnabledForCurrentPreview;
+        boolean showNameBar = renameEditing;
         int uploadBarH = showUploadBar ? 2 : 0;
         int uploadBarGap = 0;
-        int uploadBarYOffset = showUploadBar ? (uploadBarH + uploadBarGap) : 0;
+        int nameBarYOffset = showNameBar ? NAME_META_H : 0;
+        int uploadBarYOffset = (showUploadBar ? (uploadBarH + uploadBarGap) : 0) + nameBarYOffset;
 
         int baseX = switch (cfg.corner) {
             case BOTTOM_RIGHT, TOP_RIGHT -> screenW - baseWidth - margin;
@@ -364,6 +383,9 @@ public class ScreenshotPreviewRenderer {
         float offsetX = 0f;
 
         long elapsed   = now - showFrom;
+        if (renameEditing) {
+            showUntil = now + 1000L;
+        }
         if (uploadEnabledForCurrentPreview && uploadState == UploadState.UPLOADING && now >= showUntil) {
             // Keep preview visible while upload is still in progress.
             showUntil = now + 1000L;
@@ -437,9 +459,11 @@ public class ScreenshotPreviewRenderer {
         previewHitW = drawWidth;
         previewHitH = drawHeight;
 
+        int framedHeight = drawHeight + nameBarYOffset;
+
         // Frame
         context.fill(drawX - 1, drawY - 1,
-                drawX + drawWidth + 1, drawY + drawHeight + 1,
+                drawX + drawWidth + 1, drawY + framedHeight + 1,
                 (alphaInt << 24));
 
         // Image
@@ -487,22 +511,25 @@ public class ScreenshotPreviewRenderer {
                 cfg.miniPreviewShowCorner,
                 cfg.miniPreviewCopyCorner,
                 cfg.miniPreviewUploadCorner,
-                cfg.miniPreviewDeleteCorner
+                cfg.miniPreviewDeleteCorner,
+                cfg.miniPreviewRenameCorner
         };
         int[] order = {
                 cfg.miniPreviewShowOrder,
                 cfg.miniPreviewCopyOrder,
                 cfg.miniPreviewUploadOrder,
-                cfg.miniPreviewDeleteOrder
+                cfg.miniPreviewDeleteOrder,
+                cfg.miniPreviewRenameOrder
         };
         boolean[] visible = {
                 cfg.miniPreviewShowVisible,
                 cfg.miniPreviewCopyVisible,
                 showUploadButton && cfg.miniPreviewUploadVisible,
-                cfg.miniPreviewDeleteVisible
+                cfg.miniPreviewDeleteVisible,
+                cfg.miniPreviewRenameVisible
         };
         ActionButtonLayout.arrange(
-                btnX, btnY, corners, order, visible, 4,
+                btnX, btnY, corners, order, visible, ACTION_COUNT,
                 drawX, drawY, drawWidth, drawHeight,
                 BTN_W, BTN_H, BTN_GAP, 2);
 
@@ -510,7 +537,7 @@ public class ScreenshotPreviewRenderer {
         double mouseY = mc.mouseHandler.ypos() * context.guiHeight() / mc.getWindow().getScreenHeight();
         hoveredButton = -1;
 
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < ACTION_COUNT; i++) {
             if (!visible[i]) continue;
             if (mouseX >= btnX[i] && mouseX <= btnX[i] + BTN_W
                     && mouseY >= btnY[i] && mouseY <= btnY[i] + BTN_H) {
@@ -521,9 +548,10 @@ public class ScreenshotPreviewRenderer {
                 hoveredButton == 0 ? ICON_SHOW_H : ICON_SHOW,
                 hoveredButton == 1 ? ICON_COPY_H : ICON_COPY,
                 hoveredButton == 2 ? ICON_UPLOAD_H : ICON_UPLOAD,
-                hoveredButton == 3 ? ICON_DELETE_H : ICON_DELETE
+                hoveredButton == 3 ? ICON_DELETE_H : ICON_DELETE,
+                hoveredButton == 4 ? ICON_RENAME_H : ICON_RENAME
         };
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < ACTION_COUNT; i++) {
             if (!visible[i]) continue;
             context.blit(RenderPipelines.GUI_TEXTURED, icons[i],
                     btnX[i], btnY[i], 0f, 0f,
@@ -536,6 +564,10 @@ public class ScreenshotPreviewRenderer {
                 btnX[i] = -100;
                 btnY[i] = -100;
             }
+        }
+
+        if (showNameBar) {
+            drawRenameBar(context, drawX, drawY + drawHeight, drawWidth, now);
         }
 
         if (showUploadBar) {
@@ -552,7 +584,7 @@ public class ScreenshotPreviewRenderer {
             }
 
             int barX = drawX;
-            int barY = drawY + drawHeight + uploadBarGap;
+            int barY = drawY + drawHeight + nameBarYOffset + uploadBarGap;
             int barW = drawWidth;
             int barFillW;
             int barColor;
@@ -609,10 +641,11 @@ public class ScreenshotPreviewRenderer {
                     cfg.miniPreviewShowVisible,
                     cfg.miniPreviewCopyVisible,
                     showUploadButton && cfg.miniPreviewUploadVisible,
-                    cfg.miniPreviewDeleteVisible
+                    cfg.miniPreviewDeleteVisible,
+                    cfg.miniPreviewRenameVisible
             };
 
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < ACTION_COUNT; i++) {
                 if (!visible[i]) continue;
                 if (btnX[i] == 0 && btnY[i] == 0) continue;
                 if (mouseX >= btnX[i] && mouseX <= btnX[i] + BTN_W
@@ -623,6 +656,7 @@ public class ScreenshotPreviewRenderer {
                         case 1 -> copyToClipboard();
                         case 2 -> uploadCurrentPreview();
                         case 3 -> deleteCurrentPreview();
+                        case 4 -> startRenameEdit();
                     }
                     return true;
                 }
@@ -655,6 +689,82 @@ public class ScreenshotPreviewRenderer {
         previewHitW = 0;
         previewHitH = 0;
         lastPreviewClickMs = -1L;
+    }
+
+    public static boolean isRenameEditing() {
+        return renameEditing;
+    }
+
+    public static boolean handleRenameKey(int action, int key) {
+        if (!renameEditing) return false;
+        if (action != GLFW.GLFW_PRESS && action != GLFW.GLFW_REPEAT) return true;
+
+        if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
+            acceptRenameEdit();
+            return true;
+        }
+        if (key == GLFW.GLFW_KEY_ESCAPE) {
+            stopRenameEdit(true);
+            return true;
+        }
+        if (key == GLFW.GLFW_KEY_BACKSPACE) {
+            deleteLastRenameCodePoint();
+            return true;
+        }
+        return true;
+    }
+
+    public static boolean handleRenameChar(int codePoint) {
+        if (!renameEditing) return false;
+        if (!isAllowedRenameCharacter(codePoint)) return true;
+        appendRenameText(new String(Character.toChars(codePoint)));
+        return true;
+    }
+
+    public static boolean handleRenameChar(String text) {
+        if (!renameEditing) return false;
+        if (text == null || text.isEmpty()) return true;
+        text.codePoints()
+                .filter(ScreenshotPreviewRenderer::isAllowedRenameCharacter)
+                .forEach(cp -> appendRenameText(new String(Character.toChars(cp))));
+        return true;
+    }
+
+    private static boolean isAllowedRenameCharacter(int codePoint) {
+        return codePoint >= 32
+                && codePoint != 127
+                && !Character.isISOControl(codePoint)
+                && Character.isValidCodePoint(codePoint);
+    }
+
+    private static void drawRenameBar(
+            GuiGraphics context,
+            int x,
+            int y,
+            int width,
+            long now) {
+        long elapsed = renameEditStart < 0 ? 0L : now - renameEditStart;
+        float progress = easeOutCubic(Math.min(1f, elapsed / 140f));
+        int visibleH = Math.max(1, Math.round(NAME_META_H * progress));
+        int barY = y + NAME_META_H - visibleH;
+        context.enableScissor(x, y, x + width, y + NAME_META_H);
+        context.fill(x, barY, x + width, barY + NAME_META_H, 0xFF3A3A3A);
+        context.fill(x, barY, x + width, barY + 1, 0xFF505050);
+
+        String label = renameValue.isEmpty() ? "..." : renameValue.toString();
+        int maxW = width - 8;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.font.width(label) > maxW) {
+            while (mc.font.width("..." + label) > maxW && !label.isEmpty()) {
+                label = label.substring(1);
+            }
+            label = "..." + label;
+        }
+        if (!renameValue.isEmpty() && (now / 450L) % 2L == 0L) {
+            label += "_";
+        }
+        context.drawString(mc.font, Component.literal(label), x + 4, barY + 4, 0xFFE0E0E0);
+        context.disableScissor();
     }
 
     private static void playActionButtonClickSound() {
@@ -748,6 +858,122 @@ public class ScreenshotPreviewRenderer {
             }
         }
         ScreenshotUploader.uploadWithClientFeedback(file, id, true);
+    }
+
+    private static java.io.File currentOrLatestScreenshotFile() {
+        java.io.File file = currentPreviewFile;
+        if (file != null && file.exists()) return file;
+
+        java.io.File dir = new java.io.File(Minecraft.getInstance().gameDirectory, "screenshots");
+        java.io.File[] found = dir.listFiles(f -> f.isFile() && f.getName().toLowerCase(Locale.ROOT).endsWith(".png"));
+        if (found != null && found.length > 0) {
+            java.util.Arrays.sort(found, java.util.Comparator.comparingLong(java.io.File::lastModified).reversed());
+            return found[0];
+        }
+        return null;
+    }
+
+    private static void startRenameEdit() {
+        java.io.File file = currentOrLatestScreenshotFile();
+        if (file == null || !file.exists()) return;
+        currentPreviewFile = file;
+        renameValue.setLength(0);
+        renameEditing = true;
+        renameEditStart = System.currentTimeMillis();
+        showUntil = renameEditStart + 1000L;
+    }
+
+    private static void stopRenameEdit(boolean resumeTimer) {
+        renameEditing = false;
+        renameEditStart = -1L;
+        renameValue.setLength(0);
+        if (resumeTimer && showFrom != -1) {
+            showUntil = System.currentTimeMillis()
+                    + ScreenshotConfig.get().previewDurationSeconds * 1000L;
+        }
+    }
+
+    private static void appendRenameText(String text) {
+        if (text == null || text.isEmpty()) return;
+        if (renameValue.length() >= NAME_MAX_LENGTH) return;
+        int remaining = NAME_MAX_LENGTH - renameValue.length();
+        renameValue.append(text.length() > remaining ? text.substring(0, remaining) : text);
+    }
+
+    private static void deleteLastRenameCodePoint() {
+        if (renameValue.isEmpty()) return;
+        int last = renameValue.offsetByCodePoints(renameValue.length(), -1);
+        renameValue.delete(last, renameValue.length());
+    }
+
+    private static void acceptRenameEdit() {
+        String requestedName = renameValue.toString().trim();
+        if (requestedName.isEmpty()) {
+            stopRenameEdit(false);
+            close();
+            return;
+        }
+        renameCurrentPreviewFile(requestedName);
+        stopRenameEdit(false);
+        close();
+    }
+
+    private static void renameCurrentPreviewFile(String requestedName) {
+        java.io.File source = currentOrLatestScreenshotFile();
+        if (source == null || !source.exists()) return;
+        java.io.File parentDir = source.getParentFile();
+        if (parentDir == null) return;
+
+        String baseName = sanitizeScreenshotName(requestedName);
+        if (baseName.isEmpty()) return;
+
+        java.io.File target = uniqueScreenshotFile(parentDir, baseName, source);
+        if (source.equals(target)) return;
+
+        try {
+            java.nio.file.Files.move(source.toPath(), target.toPath());
+        } catch (Exception ignored) {
+            return;
+        }
+
+        currentPreviewFile = target;
+        if (currentPreviewId != null && !currentPreviewId.isBlank()) {
+            pendingFiles.put(currentPreviewId, target);
+        }
+    }
+
+    private static String sanitizeScreenshotName(String name) {
+        String sanitized = name.trim()
+                .replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_")
+                .replaceAll("\\s+", " ");
+        while (sanitized.endsWith(".") || sanitized.endsWith(" ")) {
+            sanitized = sanitized.substring(0, sanitized.length() - 1);
+        }
+        if (sanitized.toLowerCase(Locale.ROOT).endsWith(".png")) {
+            sanitized = sanitized.substring(0, sanitized.length() - 4).trim();
+        }
+        if (sanitized.length() > NAME_MAX_LENGTH) {
+            sanitized = sanitized.substring(0, NAME_MAX_LENGTH).trim();
+        }
+        return sanitized;
+    }
+
+    private static java.io.File uniqueScreenshotFile(
+            java.io.File dir,
+            String baseName,
+            java.io.File source) {
+        java.io.File target = new java.io.File(dir, baseName + ".png");
+        if (target.equals(source) || !target.exists()) {
+            return target;
+        }
+
+        for (int i = 2; i < 1000; i++) {
+            target = new java.io.File(dir, baseName + " (" + i + ").png");
+            if (target.equals(source) || !target.exists()) {
+                return target;
+            }
+        }
+        return new java.io.File(dir, baseName + " (" + System.currentTimeMillis() + ").png");
     }
 
     private static void deleteCurrentPreview() {

@@ -217,6 +217,19 @@ public class ScreenshotConfigScreen extends Screen {
                             loadThumbnails();
                         })));
 
+        settingsWidgets.add(addRenderableWidget(CycleButton.builder(
+                        (Boolean enabled) -> Component.translatable(enabled
+                                ? "better_screenshots.config.fullscreen_name_bar.on"
+                                : "better_screenshots.config.fullscreen_name_bar.off"))
+                .withValues(Boolean.TRUE, Boolean.FALSE)
+                .withInitialValue(ScreenshotConfig.get().fullscreenNameBar)
+                .create(lx, ty + 14, COL_W, BTN_H,
+                        Component.translatable("better_screenshots.config.fullscreen_name_bar"),
+                        (btn, val) -> {
+                            ScreenshotConfig.get().fullscreenNameBar = val;
+                            ScreenshotConfig.save();
+                        })));
+
         settingsWidgets.add(addRenderableWidget(Button.builder(
                         Component.translatable("better_screenshots.config.uploader.configure"),
                         btn -> minecraft.setScreen(new UploaderConfigScreen(this)))
