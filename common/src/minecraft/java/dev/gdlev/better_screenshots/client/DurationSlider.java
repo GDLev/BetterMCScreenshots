@@ -11,13 +11,17 @@ public class DurationSlider extends AbstractSliderButton {
     }
 
     private int toSeconds() {
-        return 1 + (int) Math.round(value * 14.0);
+        return (int) Math.round(value * 15.0);
     }
 
     @Override
     protected void updateMessage() {
-        setMessage(Component.translatable("better_screenshots.config.preview_duration",
-                toSeconds()));
+        int seconds = toSeconds();
+        if (seconds == 0) {
+            setMessage(Component.translatable("better_screenshots.config.preview_duration.off"));
+        } else {
+            setMessage(Component.translatable("better_screenshots.config.preview_duration", seconds));
+        }
     }
 
     @Override

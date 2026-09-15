@@ -100,6 +100,7 @@
   "better_screenshots.upload.toast.error_desc": "Verifique as configurações do uploader e tente novamente",
   "better_screenshots.config.open_gallery": "Abrir Galeria →",
   "better_screenshots.config.preview_duration": "Duração da Prévia: %ss",
+  "better_screenshots.config.preview_duration.off": "Duração da Prévia: Desativado",
   "better_screenshots.config.section.screenshots": "CAPTURAS DE TELA",
   "better_screenshots.config.section.settings": "CONFIGURAÇÕES",
   "better_screenshots.config.sound": "Som do Obturador",

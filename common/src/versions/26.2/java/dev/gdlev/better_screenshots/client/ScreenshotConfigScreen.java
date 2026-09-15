@@ -201,7 +201,7 @@ public class ScreenshotConfigScreen extends Screen {
                         (btn, val) -> { ScreenshotConfig.get().chatNotification = val; ScreenshotConfig.save(); })));
 
         // Preview time Slider
-        double initialDuration = (ScreenshotConfig.get().previewDurationSeconds - 1.0) / 14.0;
+        double initialDuration = ScreenshotConfig.get().previewDurationSeconds / 15.0;
         settingsWidgets.add(addRenderableWidget(new DurationSlider(
                 lx, ty + 14 + GAP * 6, COL_W, BTN_H, initialDuration)));
 

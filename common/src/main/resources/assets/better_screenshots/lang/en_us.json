@@ -100,6 +100,7 @@
   "better_screenshots.upload.toast.error_desc": "Check uploader settings and try again",
   "better_screenshots.config.open_gallery": "Open Gallery →",
   "better_screenshots.config.preview_duration": "Preview duration: %ss",
+  "better_screenshots.config.preview_duration.off": "Preview duration: Off",
   "better_screenshots.config.section.screenshots": "SCREENSHOTS",
   "better_screenshots.config.section.settings": "SETTINGS",
   "better_screenshots.config.sound": "Shutter Sound",

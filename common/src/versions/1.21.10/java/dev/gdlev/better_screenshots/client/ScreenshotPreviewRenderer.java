@@ -354,6 +354,12 @@ public class ScreenshotPreviewRenderer {
         Minecraft mc = Minecraft.getInstance();
         if (previewAboveScreen && isNonChatScreenOpen() && !renderingAboveScreenPass) return;
         ScreenshotConfig cfg = ScreenshotConfig.get();
+        if (cfg.previewDurationSeconds <= 0) {
+            showUntil = -1; showFrom = -1; closeStart = -1;
+            flashStart = -1; copyFlashStart = -1;
+            clearPreviewHitBounds();
+            return;
+        }
 
         int screenW    = context.guiWidth();
         int screenH    = context.guiHeight();
