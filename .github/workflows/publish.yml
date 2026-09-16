@@ -210,10 +210,10 @@ jobs:
         uses: Kira-NT/mc-publish@v3.3.1
         with:
           modrinth-id: ${{ steps.meta.outputs.modrinth_id }}
-          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+          modrinth-token: ${{ inputs.platforms != 'curseforge' && secrets.MODRINTH_TOKEN || '' }}
           modrinth-name: ${{ steps.meta.outputs.modrinth_name }}
           curseforge-id: ${{ steps.meta.outputs.curseforge_id }}
-          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          curseforge-token: ${{ inputs.platforms != 'modrinth' && secrets.CURSEFORGE_TOKEN || '' }}
           curseforge-name: ${{ steps.meta.outputs.curseforge_name }}
           files: dist/*.jar
           version: ${{ steps.meta.outputs.version }}
