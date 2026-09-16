@@ -1,0 +1,66 @@
+name: Build all variants
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.loader }} ${{ matrix.minecraft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        loader: [fabric, neoforge, forge]
+        minecraft: ['1.21', '1.21.2', '1.21.5', '1.21.8', '1.21.10', '1.21.11', '26.1', '26.2', '26.3']
+        exclude:
+          - loader: forge
+            minecraft: '1.21.2'
+          - loader: neoforge
+            minecraft: '26.3'
+          - loader: forge
+            minecraft: '26.3'
+        include:
+          - loader: forge
+            minecraft: '1.21.3'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: |
+            21
+            25
+      - uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' || github.ref != 'refs/heads/main' }}
+      - name: Build
+        env:
+          LOADER: ${{ matrix.loader }}
+          MINECRAFT: ${{ matrix.minecraft }}
+        run: |
+          # setup-java makes only the last installed JDK the default (Java 25), and
+          # Gradle does not scan the runner tool cache, so point it at both
+          # installations for the variants whose toolchain requires Java 21.
+          TOOLCHAINS="-Dorg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64"
+          if [[ "$LOADER" == forge ]]; then
+            bash forge/gradlew -p forge ":${MINECRAFT}:build" --no-daemon --configure-on-demand --max-workers=2 --stacktrace "$TOOLCHAINS"
+          else
+            bash gradlew ":${LOADER}:${MINECRAFT}:build" --no-daemon --configure-on-demand --max-workers=2 --stacktrace "$TOOLCHAINS"
+          fi
+      - name: Collect release JAR
+        env:
+          LOADER: ${{ matrix.loader }}
+          MINECRAFT: ${{ matrix.minecraft }}
+        run: python3 .github/scripts/collect-jar.py "$LOADER" "$MINECRAFT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: jars-${{ matrix.loader }}-${{ matrix.minecraft }}
+          path: dist/*.jar
+          if-no-files-found: error
+          retention-days: 7
