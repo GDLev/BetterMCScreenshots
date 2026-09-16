@@ -140,7 +140,7 @@
   "better_screenshots.fullscreen.hint": "ESC — закрыть",
 
   "better_screenshots.gallery.back": "← Назад",
-  "better_screenshots.gallery.count.many": "%s снимков экрана",
+  "better_screenshots.gallery.count.many": "Снимки экрана: %s",
   "better_screenshots.gallery.count.one": "1 снимок экрана",
   "better_screenshots.gallery.loading": "...",
   "better_screenshots.gallery.name": "Название снимка экрана",
