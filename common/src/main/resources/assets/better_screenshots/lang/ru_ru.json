@@ -176,7 +176,7 @@
   "better_screenshots.config.uploader.immich.url": "URL сервера Immich",
   "better_screenshots.config.uploader.immich.api_key": "API ключ Immich",
   "better_screenshots.config.uploader.immich.device_id": "ID устройства Immich",
-  "better_screenshots.config.uploader.custom.body_type": "Тип тела",
+  "better_screenshots.config.uploader.custom.body_type": "Формат тела запроса",
   "better_screenshots.config.uploader.custom.file_field": "Поле файла",
   "better_screenshots.config.uploader.custom.response_json_path": "Путь к URL в JSON-ответе",
   "better_screenshots.config.uploader.custom.fallback_url": "Резервный URL",
