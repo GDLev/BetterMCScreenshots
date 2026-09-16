@@ -178,7 +178,7 @@
   "better_screenshots.config.uploader.immich.device_id": "ID устройства Immich",
   "better_screenshots.config.uploader.custom.body_type": "Тип тела",
   "better_screenshots.config.uploader.custom.file_field": "Поле файла",
-  "better_screenshots.config.uploader.custom.response_json_path": "JSON-путь к ответу",
+  "better_screenshots.config.uploader.custom.response_json_path": "Путь к URL в JSON-ответе",
   "better_screenshots.config.uploader.custom.fallback_url": "Резервный URL",
   "better_screenshots.config.uploader.custom.add_header": "+ Добавить заголовок",
   "better_screenshots.config.uploader.custom.add_field": "+ Добавить поле формы",
