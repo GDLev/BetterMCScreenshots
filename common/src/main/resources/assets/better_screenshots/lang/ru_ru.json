@@ -96,7 +96,7 @@
   "better_screenshots.config.uploader.s3.path_prefix": "Префикс пути S3",
   "better_screenshots.config.uploader.custom.url": "URL для загрузки",
   "better_screenshots.config.uploader.custom.method": "Метод загрузки",
-  "better_screenshots.config.uploader.custom.cookie": "Cookie-файл",
+  "better_screenshots.config.uploader.custom.cookie": "Пользовательский cookie",
   "better_screenshots.config.uploader.custom.header": "Пользовательский заголовок",
   "better_screenshots.config.uploader.custom.post_field": "Пользовательское POST поле",
   "better_screenshots.config.uploader.method.post": "POST",
