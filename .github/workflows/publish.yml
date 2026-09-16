@@ -1,0 +1,248 @@
+name: Publish
+
+# Manual release workflow: builds every loader/version variant and uploads the
+# resulting JARs to Modrinth and CurseForge.
+#
+# Required repository secrets:
+#   MODRINTH_TOKEN    Modrinth API token with write access to the project
+#   CURSEFORGE_TOKEN  CurseForge API key (https://legacy.curseforge.com/account/api-tokens)
+#
+# The variant list lives in .github/scripts/publish-matrix.py - add new
+# Minecraft versions there so both the build and the publish job pick them up.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_name:
+        description: Release title used in the published version names
+        type: string
+        default: Better MC Screenshots
+      changelog:
+        description: Changelog for this release (empty = generated from the commits since the last tag)
+        type: string
+        default: ""
+      version_type:
+        description: Release channel
+        type: choice
+        default: release
+        options: [release, beta, alpha]
+      loaders:
+        description: Loaders to publish
+        type: choice
+        default: all
+        options: [all, fabric, neoforge, forge]
+      variants:
+        description: 'Comma-separated variant filter, e.g. "fabric/1.21.11,forge/26.1" (empty = every variant)'
+        type: string
+        default: ""
+      platforms:
+        description: Platforms to publish to
+        type: choice
+        default: both
+        options: [both, modrinth, curseforge]
+      dry_run:
+        description: Build and resolve everything without uploading
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Resolve variants
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Resolve publish matrix
+        id: matrix
+        env:
+          LOADERS: ${{ inputs.loaders }}
+          VARIANTS: ${{ inputs.variants }}
+        run: |
+          set -euo pipefail
+          matrix=$(python3 .github/scripts/publish-matrix.py)
+          {
+            echo "matrix<<MATRIX"
+            echo "$matrix"
+            echo "MATRIX"
+          } >> "$GITHUB_OUTPUT"
+          echo "$matrix" | jq -r '"Publishing \(.include | length) variant(s):", (.include[] | "  \(.path)")'
+
+  build:
+    name: Build ${{ matrix.path }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build ${{ matrix.path }}
+        env:
+          VARIANT: ${{ matrix.path }}
+        run: |
+          set -euo pipefail
+          if [ "${VARIANT%%/*}" = "forge" ]; then
+            # Forge uses its own Gradle build with its own wrapper.
+            ./forge/gradlew -p forge ":${VARIANT#*/}:build" --stacktrace
+          else
+            ./gradlew ":${VARIANT//\//:}:build" --stacktrace
+          fi
+
+      - name: Stage release JAR
+        env:
+          VARIANT: ${{ matrix.path }}
+        run: |
+          set -euo pipefail
+          version=$(grep -m1 '^mod_version=' "${VARIANT}/gradle.properties" | cut -d= -f2-)
+          mkdir -p dist
+          cp "${VARIANT}"/build/libs/*-"${version}".jar dist/
+          ls -l dist
+
+      - name: Upload JAR
+        uses: actions/upload-artifact@v7
+        with:
+          name: jar-${{ matrix.slug }}
+          path: dist/*.jar
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish ${{ matrix.path }}
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Download JAR
+        uses: actions/download-artifact@v8
+        with:
+          name: jar-${{ matrix.slug }}
+          path: dist
+
+      - name: Resolve release metadata
+        id: meta
+        env:
+          VARIANT: ${{ matrix.path }}
+          LOADER: ${{ matrix.loader }}
+          DISPLAY: ${{ matrix.display }}
+          RELEASE_NAME: ${{ inputs.release_name }}
+          CHANGELOG: ${{ inputs.changelog }}
+          PLATFORMS: ${{ inputs.platforms }}
+        run: |
+          set -euo pipefail
+
+          version=$(grep -m1 '^mod_version=' "${VARIANT}/gradle.properties" | cut -d= -f2-)
+          base="${version%%+*}"
+          range="${version#*+}"
+
+          # Release names come from user input, so they are written with GitHub's
+          # multiline-output syntax instead of a plain `name=value` line.
+          {
+            echo "version=${version}"
+            echo "modrinth_name<<EOF_MODRINTH_NAME"
+            echo "${RELEASE_NAME} [${range}]"
+            echo "EOF_MODRINTH_NAME"
+            echo "curseforge_name<<EOF_CURSEFORGE_NAME"
+            echo "${RELEASE_NAME} v${base} [${range} ${DISPLAY}]"
+            echo "EOF_CURSEFORGE_NAME"
+          } >> "$GITHUB_OUTPUT"
+
+          # Fabric builds require Fabric API, Forge and NeoForge builds ship no hard dependencies.
+          if [ "${LOADER}" = "fabric" ]; then
+            echo "dependencies=fabric-api(required){modrinth:P7dR8mSH}{curseforge:306612}" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ "${PLATFORMS}" = "curseforge" ]; then
+            echo "modrinth_id=" >> "$GITHUB_OUTPUT"
+          else
+            echo "modrinth_id=oRvsIBeW" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ "${PLATFORMS}" = "modrinth" ]; then
+            echo "curseforge_id=" >> "$GITHUB_OUTPUT"
+          else
+            echo "curseforge_id=1509917" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ -n "${CHANGELOG}" ]; then
+            printf '%s\n' "${CHANGELOG}" > changelog.md
+          elif last_tag=$(git describe --tags --abbrev=0 2>/dev/null); then
+            git log --no-merges --pretty=format:'- %s' "${last_tag}..HEAD" > changelog.md
+            printf '\n' >> changelog.md
+          else
+            git log --no-merges --pretty=format:'- %s' -n 25 HEAD > changelog.md
+            printf '\n' >> changelog.md
+          fi
+          echo "Changelog:" && cat changelog.md
+
+      - name: Publish to Modrinth and CurseForge
+        if: ${{ !inputs.dry_run }}
+        uses: Kira-NT/mc-publish@v3.3.1
+        with:
+          modrinth-id: ${{ steps.meta.outputs.modrinth_id }}
+          modrinth-token: ${{ inputs.platforms != 'curseforge' && secrets.MODRINTH_TOKEN || '' }}
+          modrinth-name: ${{ steps.meta.outputs.modrinth_name }}
+          curseforge-id: ${{ steps.meta.outputs.curseforge_id }}
+          curseforge-token: ${{ inputs.platforms != 'modrinth' && secrets.CURSEFORGE_TOKEN || '' }}
+          curseforge-name: ${{ steps.meta.outputs.curseforge_name }}
+          files: dist/*.jar
+          version: ${{ steps.meta.outputs.version }}
+          version-type: ${{ inputs.version_type }}
+          changelog-file: changelog.md
+          loaders: ${{ matrix.loader }}
+          game-versions: ${{ matrix.versions }}
+          game-version-filter: releases
+          dependencies: ${{ steps.meta.outputs.dependencies }}
+          retry-attempts: 2
+          fail-mode: fail
+
+      - name: Dry run summary
+        if: ${{ inputs.dry_run }}
+        env:
+          VERSIONS: ${{ matrix.versions }}
+          VARIANT: ${{ matrix.path }}
+          LOADER: ${{ matrix.loader }}
+          RELEASE_TYPE: ${{ inputs.version_type }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          MODRINTH_NAME: ${{ steps.meta.outputs.modrinth_name }}
+          CURSEFORGE_NAME: ${{ steps.meta.outputs.curseforge_name }}
+        run: |
+          echo "Dry run: nothing was uploaded."
+          echo "  variant:         ${VARIANT}"
+          echo "  file:            $(ls dist)"
+          echo "  version:         ${VERSION}"
+          echo "  release type:    ${RELEASE_TYPE}"
+          echo "  modrinth name:   ${MODRINTH_NAME}"
+          echo "  curseforge name: ${CURSEFORGE_NAME}"
+          echo "  loader:          ${LOADER}"
+          echo "  game versions:   $(echo "$VERSIONS" | tr '\n' ' ')"
