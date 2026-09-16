@@ -165,10 +165,16 @@ jobs:
           base="${version%%+*}"
           range="${version#*+}"
 
+          # Release names come from user input, so they are written with GitHub's
+          # multiline-output syntax instead of a plain `name=value` line.
           {
             echo "version=${version}"
-            echo "modrinth_name=${RELEASE_NAME} [${range}]"
-            echo "curseforge_name=${RELEASE_NAME} v${base} [${range} ${DISPLAY}]"
+            echo "modrinth_name<<EOF_MODRINTH_NAME"
+            echo "${RELEASE_NAME} [${range}]"
+            echo "EOF_MODRINTH_NAME"
+            echo "curseforge_name<<EOF_CURSEFORGE_NAME"
+            echo "${RELEASE_NAME} v${base} [${range} ${DISPLAY}]"
+            echo "EOF_CURSEFORGE_NAME"
           } >> "$GITHUB_OUTPUT"
 
           # Fabric builds require Fabric API, Forge and NeoForge builds ship no hard dependencies.
@@ -224,13 +230,19 @@ jobs:
         if: ${{ inputs.dry_run }}
         env:
           VERSIONS: ${{ matrix.versions }}
+          VARIANT: ${{ matrix.path }}
+          LOADER: ${{ matrix.loader }}
+          RELEASE_TYPE: ${{ inputs.version_type }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          MODRINTH_NAME: ${{ steps.meta.outputs.modrinth_name }}
+          CURSEFORGE_NAME: ${{ steps.meta.outputs.curseforge_name }}
         run: |
           echo "Dry run: nothing was uploaded."
-          echo "  variant:         ${{ matrix.path }}"
+          echo "  variant:         ${VARIANT}"
           echo "  file:            $(ls dist)"
-          echo "  version:         ${{ steps.meta.outputs.version }}"
-          echo "  release type:    ${{ inputs.version_type }}"
-          echo "  modrinth name:   ${{ steps.meta.outputs.modrinth_name }}"
-          echo "  curseforge name: ${{ steps.meta.outputs.curseforge_name }}"
-          echo "  loader:          ${{ matrix.loader }}"
+          echo "  version:         ${VERSION}"
+          echo "  release type:    ${RELEASE_TYPE}"
+          echo "  modrinth name:   ${MODRINTH_NAME}"
+          echo "  curseforge name: ${CURSEFORGE_NAME}"
+          echo "  loader:          ${LOADER}"
           echo "  game versions:   $(echo "$VERSIONS" | tr '\n' ' ')"

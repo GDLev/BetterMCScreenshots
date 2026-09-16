@@ -13,7 +13,9 @@ Environment:
 
 import json
 import os
+import re
 import sys
+from pathlib import Path
 
 LOADER_DISPLAY_NAMES = {
     "fabric": "Fabric",
@@ -53,11 +55,41 @@ VARIANTS = [
 ]
 
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+ALL_VARIANTS_PATTERN = re.compile(r"def allVariants\s*=\s*\[(.*?)\]", re.DOTALL)
+
+
+def gradle_variants():
+    """Returns the variants declared by build.gradle, or None when they cannot be read."""
+    build_gradle = REPO_ROOT / "build.gradle"
+    if not build_gradle.is_file():
+        return None
+
+    match = ALL_VARIANTS_PATTERN.search(build_gradle.read_text(encoding="utf-8"))
+    return re.findall(r'"([^"]+)"', match.group(1)) if match else None
+
+
 def main() -> None:
+    """Writes the selected variant matrix to stdout as JSON."""
     loaders = (os.environ.get("LOADERS") or "all").strip()
     requested = [variant.strip() for variant in (os.environ.get("VARIANTS") or "").split(",") if variant.strip()]
 
     known = [path for path, _ in VARIANTS]
+
+    declared = gradle_variants()
+    if declared is None:
+        print("Warning: could not read allVariants from build.gradle, skipping the drift check", file=sys.stderr)
+    else:
+        missing = [path for path in declared if path not in known]
+        extra = [path for path in known if path not in declared]
+        if missing or extra:
+            details = []
+            if missing:
+                details.append(f"declared in build.gradle but missing from VARIANTS: {', '.join(missing)}")
+            if extra:
+                details.append(f"listed in VARIANTS but not declared in build.gradle: {', '.join(extra)}")
+            sys.exit("Variant list drift between build.gradle and publish-matrix.py:\n  " + "\n  ".join(details))
+
     unknown = [variant for variant in requested if variant not in known]
     if unknown:
         sys.exit(f"Unknown variant(s): {', '.join(unknown)}\nKnown variants: {', '.join(known)}")
