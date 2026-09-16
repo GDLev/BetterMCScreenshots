@@ -135,6 +135,19 @@ public class ScreenshotConfigScreen extends Screen {
                             ScreenshotConfig.get().actionButtonTooltips = val;
                             ScreenshotConfig.save();
                         })));
+        settingsWidgets.add(addRenderableWidget(CycleButton.builder(
+                        (Boolean enabled) -> Component.translatable(enabled
+                                ? "better_screenshots.config.time_formatting.time"
+                                : "better_screenshots.config.time_formatting.filename"),
+                        ScreenshotConfig.get().formatScreenshotTime)
+                .withValues(Boolean.TRUE, Boolean.FALSE)
+                .create(lx, ty + 14, COL_W, BTN_H,
+                        Component.translatable("better_screenshots.config.time_formatting"),
+                        (btn, val) -> {
+                            ScreenshotConfig.get().formatScreenshotTime = val;
+                            ScreenshotConfig.save();
+                        })));
+
 
         settingsWidgets.add(addRenderableWidget(CycleButton.builder(
                         (ScreenshotConfig.Corner c) -> Component.translatable(switch (c) {

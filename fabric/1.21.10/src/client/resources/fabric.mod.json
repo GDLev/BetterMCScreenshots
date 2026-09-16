@@ -15,7 +15,8 @@
   "environment": "client",
   "entrypoints": {
     "fabric-datagen": ["dev.gdlev.better_screenshots.client.Better_screenshotsDataGenerator"],
-    "client": ["dev.gdlev.better_screenshots.client.Better_screenshotsClient"]
+    "client": ["dev.gdlev.better_screenshots.client.Better_screenshotsClient"],
+    "modmenu": ["dev.gdlev.better_screenshots.client.ModMenuIntegration"]
   },
   "custom" : {
     "modmenu" : {

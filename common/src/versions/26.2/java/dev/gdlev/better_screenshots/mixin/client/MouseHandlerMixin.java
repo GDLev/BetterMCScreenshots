@@ -32,7 +32,7 @@ public class MouseHandlerMixin {
 
         // Fullscreen - Handle navigation arrow clicks
         if (dev.gdlev.better_screenshots.client.MinecraftCompat.screen(mc) instanceof ScreenshotFullscreenScreen fullscreen) {
-            if (input.button() == 0) {
+            if (dev.gdlev.better_screenshots.client.MinecraftCompat.isPrimaryMouseButton(input.button())) {
                 if (fullscreen.handleNavClick(mouseX, mouseY)) {
                     ci.cancel();
                     return;
@@ -46,7 +46,7 @@ public class MouseHandlerMixin {
         if (dev.gdlev.better_screenshots.client.MinecraftCompat.screen(mc) == null
                 || dev.gdlev.better_screenshots.client.MinecraftCompat.screen(mc) instanceof net.minecraft.client.gui.screens.ChatScreen
                 || isPreviewAboveScreen()) {
-            if (input.button() == 0) {
+            if (dev.gdlev.better_screenshots.client.MinecraftCompat.isPrimaryMouseButton(input.button())) {
                 if (ScreenshotPreviewRenderer.handleClick(mouseX, mouseY)) {
                     ci.cancel();
                 }

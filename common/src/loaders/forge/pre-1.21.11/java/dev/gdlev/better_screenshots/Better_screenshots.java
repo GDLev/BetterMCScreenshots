@@ -4,6 +4,7 @@ import com.mojang.logging.LogUtils;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.client.ConfigScreenHandler;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import org.slf4j.Logger;
 
@@ -19,5 +20,6 @@ public class Better_screenshots {
 
     public Better_screenshots(FMLJavaModLoadingContext context) {
         dev.gdlev.better_screenshots.client.ScreenshotConfig.load();
+        context.registerExtensionPoint(ConfigScreenHandler.ConfigScreenFactory.class, () -> new ConfigScreenHandler.ConfigScreenFactory(dev.gdlev.better_screenshots.client.ScreenshotConfigScreen::new));
     }
 }

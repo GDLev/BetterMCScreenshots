@@ -1,6 +1,7 @@
 package dev.gdlev.better_screenshots.client;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import com.mojang.blaze3d.platform.InputConstants;
 import java.io.File;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -22,7 +23,6 @@ import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.sounds.SoundEvents;
-import net.minecraft.util.Util;
 
 public class ScreenshotGalleryScreen extends Screen {
 
@@ -411,7 +411,7 @@ public class ScreenshotGalleryScreen extends Screen {
     // Click handling
 
     public boolean handleClick(int button, double mouseX, double mouseY) {
-        if (button != 0) return false;
+        if (!MinecraftCompat.isPrimaryMouseButton(button)) return false;
         int topPad = screenshotsTopPad();
 
         if (isClickInsideNameEditor(mouseX, mouseY)) {
@@ -524,11 +524,11 @@ public class ScreenshotGalleryScreen extends Screen {
     public boolean keyPressed(KeyEvent input) {
         if (editingNameIdx >= 0 && nameEditBox != null) {
             int key = input.key();
-            if (key == 256) {
+            if (key == InputConstants.KEY_ESCAPE) {
                 cancelNameEdit();
                 return true;
             }
-            if (key == 257 || key == 335) {
+            if (key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER) {
                 acceptNameEdit();
                 return true;
             }
@@ -542,7 +542,7 @@ public class ScreenshotGalleryScreen extends Screen {
     @Override
     public boolean mouseDragged(MouseButtonEvent input, double dx, double dy) {
         int topPad = screenshotsTopPad();
-        if (input.button() == 0 && draggingScrollbar) {
+        if (MinecraftCompat.isPrimaryMouseButton(input.button()) && draggingScrollbar) {
             int bottomY  = gridBottomY();
             int visibleH = bottomY - screenshotsTopPad();
             int tmbH     = Math.max(16, visibleH * visibleH / totalContentH);
@@ -555,7 +555,7 @@ public class ScreenshotGalleryScreen extends Screen {
 
     @Override
     public boolean mouseReleased(MouseButtonEvent input) {
-        if (input.button() == 0 && draggingScrollbar) {
+        if (MinecraftCompat.isPrimaryMouseButton(input.button()) && draggingScrollbar) {
             draggingScrollbar = false;
             return true;
         }
@@ -860,7 +860,23 @@ public class ScreenshotGalleryScreen extends Screen {
     private void openScreenshotsFolder() {
         File dir = new File(Minecraft.getInstance().gameDirectory, "screenshots");
         if (!dir.exists()) dir.mkdirs();
-        Util.getPlatform().openFile(dir);
+        try {
+            // Minecraft 26.3 opens files through its SDL-backed platform bridge.
+            Class.forName("com.mojang.blaze3d.Blaze3D")
+                    .getMethod("openPath", java.nio.file.Path.class)
+                    .invoke(null, dir.toPath());
+            return;
+        } catch (ReflectiveOperationException ignored) {
+            // 26.2 and earlier use the former platform API.
+        }
+
+        try {
+            Class<?> util = Class.forName("net.minecraft.util.Util");
+            Object platform = util.getMethod("getPlatform").invoke(null);
+            platform.getClass().getMethod("openFile", File.class).invoke(platform, dir);
+        } catch (ReflectiveOperationException ignored) {
+            // No supported platform file-opening API is available.
+        }
     }
 
     private void startNameEdit(int idx) {
@@ -1192,7 +1208,10 @@ public class ScreenshotGalleryScreen extends Screen {
 
         boolean editing = idx == editingNameIdx && nameEditBox != null && nameEditBox.isVisible();
         String customName = displayName(file);
-        String label = customName != null ? customName : formatScreenshotTime(file.lastModified());
+        String label = customName != null ? customName
+                : ScreenshotConfig.get().formatScreenshotTime
+                        ? formatScreenshotTime(file.lastModified())
+                        : file.getName();
         int labelW = width - EDIT_ICON_W - 10;
         if (font.width(label) > labelW) {
             String clipped = label;

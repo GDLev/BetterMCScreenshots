@@ -7,7 +7,6 @@ import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.resources.Identifier;
 import net.minecraft.sounds.SoundEvent;
-import org.lwjgl.glfw.GLFW;
 
 public class Better_screenshotsClient implements ClientModInitializer {
 
@@ -25,8 +24,8 @@ public class Better_screenshotsClient implements ClientModInitializer {
         // Keybind mapping
         openConfigKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.better_screenshots.open_config",
-                InputConstants.Type.KEYSYM,
-                GLFW.GLFW_KEY_F8,
+                keyboardKeyType(),
+                InputConstants.KEY_F8,
                 new KeyMapping.Category(Identifier.parse("category.better_screenshots"))
         ));
 
@@ -41,5 +40,13 @@ public class Better_screenshotsClient implements ClientModInitializer {
         net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback.EVENT
                 .register((dispatcher, buildContext) ->
                         ScreenshotCommand.register(dispatcher));
+    }
+
+    private static InputConstants.Type keyboardKeyType() {
+        try {
+            return InputConstants.Type.valueOf("KEYSYM");
+        } catch (IllegalArgumentException ignored) {
+            return InputConstants.Type.valueOf("KEYBOARD");
+        }
     }
 }

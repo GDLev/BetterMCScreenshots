@@ -29,6 +29,7 @@ final class ActionButtonTooltips {
             case 1 -> "better_screenshots.config.actions.action.copy";
             case 2 -> "better_screenshots.config.actions.action.upload";
             case 3 -> "better_screenshots.config.actions.action.delete";
+            case 4 -> "better_screenshots.config.actions.action.rename";
             default -> "better_screenshots.config.actions.configure";
         });
     }

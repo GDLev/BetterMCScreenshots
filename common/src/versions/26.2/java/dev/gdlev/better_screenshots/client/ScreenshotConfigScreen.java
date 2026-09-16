@@ -135,6 +135,19 @@ public class ScreenshotConfigScreen extends Screen {
                             ScreenshotConfig.get().actionButtonTooltips = val;
                             ScreenshotConfig.save();
                         })));
+        settingsWidgets.add(addRenderableWidget(CycleButton.builder(
+                        (Boolean enabled) -> Component.translatable(enabled
+                                ? "better_screenshots.config.time_formatting.time"
+                                : "better_screenshots.config.time_formatting.filename"),
+                        ScreenshotConfig.get().formatScreenshotTime)
+                .withValues(Boolean.TRUE, Boolean.FALSE)
+                .create(lx, ty + 14, COL_W, BTN_H,
+                        Component.translatable("better_screenshots.config.time_formatting"),
+                        (btn, val) -> {
+                            ScreenshotConfig.get().formatScreenshotTime = val;
+                            ScreenshotConfig.save();
+                        })));
+
 
         settingsWidgets.add(addRenderableWidget(CycleButton.builder(
                         (ScreenshotConfig.Corner c) -> Component.translatable(switch (c) {
@@ -497,14 +510,14 @@ public class ScreenshotConfigScreen extends Screen {
         updateWidgetPositions();
         if (handleClick(input.button(), input.x(), input.y())) return true;
 
-        if (input.button() == 0) {
+        if (MinecraftCompat.isPrimaryMouseButton(input.button())) {
             if (doneBtn != null && doneBtn.isMouseOver(input.x(), input.y())) {
                 dev.gdlev.better_screenshots.client.MinecraftCompat.setScreen(minecraft, parent);
                 return true;
             }
         }
 
-        if (input.button() == 0 && maxScroll > 0) {
+        if (MinecraftCompat.isPrimaryMouseButton(input.button()) && maxScroll > 0) {
             int lx = leftX();
             int sTop = topY() + 12;
             int sBottom = bottomBtnY() - 2;
@@ -539,7 +552,7 @@ public class ScreenshotConfigScreen extends Screen {
 
     @Override
     public boolean mouseDragged(MouseButtonEvent input, double dx, double dy) {
-        if (input.button() == 0 && draggingScrollbar) {
+        if (MinecraftCompat.isPrimaryMouseButton(input.button()) && draggingScrollbar) {
             int sTop = topY() + 12;
             int sBottom = bottomBtnY() - 2;
             int sHeight = sBottom - sTop;
@@ -553,7 +566,7 @@ public class ScreenshotConfigScreen extends Screen {
 
     @Override
     public boolean mouseReleased(MouseButtonEvent input) {
-        if (input.button() == 0 && draggingScrollbar) {
+        if (MinecraftCompat.isPrimaryMouseButton(input.button()) && draggingScrollbar) {
             draggingScrollbar = false;
             return true;
         }
@@ -570,7 +583,7 @@ public class ScreenshotConfigScreen extends Screen {
     }
 
     public boolean handleClick(int button, double mouseX, double mouseY) {
-        if (button != 0) return false;
+        if (!MinecraftCompat.isPrimaryMouseButton(button)) return false;
 
         // Show action buttons when selected
         if (selectedThumbIdx >= 0) {

@@ -42,9 +42,8 @@ public class MouseHandlerMixin {
             }
         }
 
-        // Mini preview is clickable during gameplay and chat only. Menus may hide it,
-        // so they must not let its stale hitbox consume clicks.
-        if (mc.screen == null || mc.screen instanceof net.minecraft.client.gui.screens.ChatScreen) {
+        if (mc.screen == null || mc.screen instanceof net.minecraft.client.gui.screens.ChatScreen
+                || ScreenshotPreviewRenderer.isPreviewAboveScreen()) {
             if (button == 0) {
                 if (ScreenshotPreviewRenderer.handleClick(mouseX, mouseY)) {
                     ci.cancel();

@@ -74,7 +74,8 @@ public class Better_screenshotsClient {
                 }
             }
 
-            if (mc.screen == null || mc.screen instanceof net.minecraft.client.gui.screens.ChatScreen) {
+            if (mc.screen == null || mc.screen instanceof net.minecraft.client.gui.screens.ChatScreen
+                    || ScreenshotPreviewRenderer.isPreviewAboveScreen()) {
                 if (button == 0) {
                     if (ScreenshotPreviewRenderer.handleClick(mouseX, mouseY)) {
                         event.setCanceled(true);

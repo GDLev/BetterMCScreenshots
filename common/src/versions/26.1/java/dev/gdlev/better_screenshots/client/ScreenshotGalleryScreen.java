@@ -1184,7 +1184,10 @@ public class ScreenshotGalleryScreen extends Screen {
 
         boolean editing = idx == editingNameIdx && nameEditBox != null && nameEditBox.isVisible();
         String customName = displayName(file);
-        String label = customName != null ? customName : formatScreenshotTime(file.lastModified());
+        String label = customName != null ? customName
+                : ScreenshotConfig.get().formatScreenshotTime
+                        ? formatScreenshotTime(file.lastModified())
+                        : file.getName();
         int labelW = width - EDIT_ICON_W - 10;
         if (font.width(label) > labelW) {
             String clipped = label;

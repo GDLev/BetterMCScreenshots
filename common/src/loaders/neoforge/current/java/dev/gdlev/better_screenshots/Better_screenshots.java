@@ -4,6 +4,7 @@ import com.mojang.logging.LogUtils;
 import net.minecraft.resources.Identifier;
 import net.minecraft.sounds.SoundEvent;
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import org.slf4j.Logger;
@@ -20,5 +21,6 @@ public class Better_screenshots {
 
     public Better_screenshots(IEventBus modEventBus, ModContainer modContainer) {
         dev.gdlev.better_screenshots.client.ScreenshotConfig.load();
+        modContainer.registerExtensionPoint(IConfigScreenFactory.class, (IConfigScreenFactory) (container, modListScreen) -> new dev.gdlev.better_screenshots.client.ScreenshotConfigScreen(modListScreen));
     }
 }

@@ -89,6 +89,7 @@ public class ScreenshotPreviewRenderer {
     }
 
     private static long showUntil      = -1;
+    private static long previewTimerUpdatedAt = -1;
     private static long showFrom       = -1;
     private static long flashStart     = -1;
     private static long copyFlashStart = -1;
@@ -146,6 +147,19 @@ public class ScreenshotPreviewRenderer {
     private static String lastUploadError = "";
 
     public static DynamicTexture getPreviewTexture() { return previewTexture; }
+
+    public static boolean isPreviewAboveScreen() { return previewAboveScreen; }
+
+    public static boolean blocksScreenHover(double mouseX, double mouseY) {
+        return previewAboveScreen && !isFullscreenScreenOpen() && isInsidePreview(mouseX, mouseY);
+    }
+
+    public static boolean blocksScreenHover() {
+        Minecraft mc = Minecraft.getInstance();
+        return blocksScreenHover(
+                mc.mouseHandler.xpos() * mc.getWindow().getGuiScaledWidth() / mc.getWindow().getScreenWidth(),
+                mc.mouseHandler.ypos() * mc.getWindow().getGuiScaledHeight() / mc.getWindow().getScreenHeight());
+    }
 
     public static boolean supportsMiniPreviewRename() { return true; }
 
@@ -246,6 +260,7 @@ public class ScreenshotPreviewRenderer {
                 .register(PREVIEW_ID, previewTexture);
         showFrom       = System.currentTimeMillis();
         showUntil      = showFrom + (ScreenshotConfig.get().previewDurationSeconds * 1000L);
+        previewTimerUpdatedAt = showFrom;
         flashStart     = ScreenshotConfig.get().previewAnimationsEnabled() ? showFrom : -1;
         closeStart     = -1;
         copyFlashStart = -1;
@@ -342,7 +357,7 @@ public class ScreenshotPreviewRenderer {
     }
 
     public static void renderAboveScreens(GuiGraphics context) {
-        if (!previewAboveScreen) return;
+        if (!previewAboveScreen || isFullscreenScreenOpen()) return;
         renderingAboveScreenPass = true;
         context.pose().pushPose();
         context.pose().translate(0.0F, 0.0F, 9000.0F);
@@ -354,13 +369,24 @@ public class ScreenshotPreviewRenderer {
         }
     }
 
+    public static void renderBehindFullscreen(GuiGraphics context) {
+        if (!previewAboveScreen) return;
+        renderingAboveScreenPass = true;
+        try {
+            renderPreview(context);
+        } finally {
+            renderingAboveScreenPass = false;
+        }
+    }
+
     private static void renderPreview(GuiGraphics context) {
         long now = System.currentTimeMillis();
         if (showFrom == -1) return;
         if (previewTexture == null || previewTexture.getPixels() == null) return;
 
         Minecraft mc = Minecraft.getInstance();
-        if (previewAboveScreen && isNonChatScreenOpen() && !renderingAboveScreenPass) return;
+        if (previewAboveScreen && isNonChatScreenOpen() && !renderingAboveScreenPass && !isFullscreenScreenOpen()) return;
+        pausePreviewTimerWhileHovered(now);
         ScreenshotConfig cfg = ScreenshotConfig.get();
         if (cfg.previewDurationSeconds <= 0) {
             showUntil = -1; showFrom = -1; closeStart = -1;
@@ -552,11 +578,13 @@ public class ScreenshotPreviewRenderer {
         double mouseY = mc.mouseHandler.ypos() * context.guiHeight() / mc.getWindow().getScreenHeight();
         hoveredButton = -1;
 
-        for (int i = 0; i < ACTION_COUNT; i++) {
-            if (!visible[i]) continue;
-            if (mouseX >= btnX[i] && mouseX <= btnX[i] + BTN_W
-                    && mouseY >= btnY[i] && mouseY <= btnY[i] + BTN_H) {
-                hoveredButton = i;
+        if (isMiniPreviewInteractive()) {
+            for (int i = 0; i < ACTION_COUNT; i++) {
+                if (!visible[i]) continue;
+                if (mouseX >= btnX[i] && mouseX <= btnX[i] + BTN_W
+                        && mouseY >= btnY[i] && mouseY <= btnY[i] + BTN_H) {
+                    hoveredButton = i;
+                }
             }
         }
         ResourceLocation[] icons = {
@@ -572,7 +600,9 @@ public class ScreenshotPreviewRenderer {
                     btnX[i], btnY[i], 0f, 0f,
                     BTN_W, BTN_H, BTN_W, BTN_H);
         }
-        ActionButtonTooltips.draw(context, mc.font, context.guiWidth(), context.guiHeight(), mouseX, mouseY, hoveredButton, false);
+        if (isMiniPreviewInteractive()) {
+            ActionButtonTooltips.draw(context, mc.font, context.guiWidth(), context.guiHeight(), mouseX, mouseY, hoveredButton, false);
+        }
         } else {
             hoveredButton = -1;
             for (int i = 0; i < btnX.length; i++) {
@@ -638,13 +668,29 @@ public class ScreenshotPreviewRenderer {
                 && !(mc.screen instanceof net.minecraft.client.gui.screens.ChatScreen);
     }
 
+    private static boolean isFullscreenScreenOpen() {
+        return Minecraft.getInstance().screen instanceof ScreenshotFullscreenScreen;
+    }
+
+    private static boolean isMiniPreviewInteractive() {
+        Minecraft mc = Minecraft.getInstance();
+        boolean nonChatScreen = mc.screen != null
+                && !(mc.screen instanceof net.minecraft.client.gui.screens.ChatScreen);
+        return !isFullscreenScreenOpen() && (!nonChatScreen || previewAboveScreen);
+    }
+
     public static boolean handleClick(double mouseX, double mouseY) {
+        if (isFullscreenScreenOpen()) {
+            lastPreviewClickMs = -1L;
+            return false;
+        }
         if (showFrom == -1) return false;
         if (closeStart != -1) return false;
         if (showUntil != -1 && System.currentTimeMillis() > showUntil) return false;
 
         Minecraft mc = Minecraft.getInstance();
-        if (mc.screen != null && !(mc.screen instanceof net.minecraft.client.gui.screens.ChatScreen)) {
+        if (mc.screen != null && !(mc.screen instanceof net.minecraft.client.gui.screens.ChatScreen)
+                && !previewAboveScreen) {
             lastPreviewClickMs = -1L;
             return false;
         }
@@ -692,6 +738,21 @@ public class ScreenshotPreviewRenderer {
         return false;
     }
 
+    private static void pausePreviewTimerWhileHovered(long now) {
+        if (previewTimerUpdatedAt >= 0 && showUntil > now && closeStart == -1
+                && !isFullscreenScreenOpen()) {
+            Minecraft mc = Minecraft.getInstance();
+            double mouseX = mc.mouseHandler.xpos() * mc.getWindow().getGuiScaledWidth()
+                    / mc.getWindow().getScreenWidth();
+            double mouseY = mc.mouseHandler.ypos() * mc.getWindow().getGuiScaledHeight()
+                    / mc.getWindow().getScreenHeight();
+            if (isInsidePreview(mouseX, mouseY)) {
+                showUntil += Math.max(0L, now - previewTimerUpdatedAt);
+            }
+        }
+        previewTimerUpdatedAt = now;
+    }
+
     private static boolean isInsidePreview(double mouseX, double mouseY) {
         return previewHitW > 0 && previewHitH > 0
                 && mouseX >= previewHitX && mouseX <= previewHitX + previewHitW
@@ -703,6 +764,7 @@ public class ScreenshotPreviewRenderer {
         previewHitY = -100;
         previewHitW = 0;
         previewHitH = 0;
+        previewTimerUpdatedAt = -1L;
         lastPreviewClickMs = -1L;
     }
 

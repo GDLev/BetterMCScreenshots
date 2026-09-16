@@ -70,6 +70,7 @@ public class ScreenshotPreviewRenderer {
     }
 
     private static long showUntil      = -1;
+    private static long previewTimerUpdatedAt = -1;
     private static long showFrom       = -1;
     private static long flashStart     = -1;
     private static long copyFlashStart = -1;
@@ -235,6 +236,7 @@ public class ScreenshotPreviewRenderer {
                 .register(PREVIEW_ID, previewTexture);
         showFrom       = System.currentTimeMillis();
         showUntil      = showFrom + (ScreenshotConfig.get().previewDurationSeconds * 1000L);
+        previewTimerUpdatedAt = showFrom;
         flashStart     = ScreenshotConfig.get().previewAnimationsEnabled() ? showFrom : -1;
         closeStart     = -1;
         copyFlashStart = -1;
@@ -319,6 +321,16 @@ public class ScreenshotPreviewRenderer {
     private static float easeOutQuad(float t)  { return 1f - (1f - t) * (1f - t); }
 
     public static void renderAboveScreens(GuiGraphicsExtractor context) {
+        if (!previewAboveScreen || isFullscreenScreenOpen()) return;
+        renderingAboveScreenPass = true;
+        try {
+            render(context);
+        } finally {
+            renderingAboveScreenPass = false;
+        }
+    }
+
+    public static void renderBehindFullscreen(GuiGraphicsExtractor context) {
         if (!previewAboveScreen) return;
         renderingAboveScreenPass = true;
         try {
@@ -334,7 +346,8 @@ public class ScreenshotPreviewRenderer {
         if (previewTexture == null || previewTexture.getPixels() == null) return;
 
         Minecraft mc = Minecraft.getInstance();
-        if (previewAboveScreen && isNonChatScreenOpen() && !renderingAboveScreenPass) return;
+        if (previewAboveScreen && isNonChatScreenOpen() && !renderingAboveScreenPass && !isFullscreenScreenOpen()) return;
+        pausePreviewTimerWhileHovered(now);
 
         ScreenshotConfig cfg = ScreenshotConfig.get();
         if (cfg.previewDurationSeconds <= 0) {
@@ -528,11 +541,13 @@ public class ScreenshotPreviewRenderer {
             double mouseY = mc.mouseHandler.ypos() * context.guiHeight() / mc.getWindow().getScreenHeight();
             hoveredButton = -1;
 
-            for (int i = 0; i < ACTION_COUNT; i++) {
-                if (!visible[i]) continue;
-                if (mouseX >= btnX[i] && mouseX <= btnX[i] + BTN_W
-                        && mouseY >= btnY[i] && mouseY <= btnY[i] + BTN_H) {
-                    hoveredButton = i;
+            if (isMiniPreviewInteractive()) {
+                for (int i = 0; i < ACTION_COUNT; i++) {
+                    if (!visible[i]) continue;
+                    if (mouseX >= btnX[i] && mouseX <= btnX[i] + BTN_W
+                            && mouseY >= btnY[i] && mouseY <= btnY[i] + BTN_H) {
+                        hoveredButton = i;
+                    }
                 }
             }
             Identifier[] icons = {
@@ -613,7 +628,7 @@ public class ScreenshotPreviewRenderer {
             double mouseY,
             int action,
             boolean closeFirst) {
-        if (action < 0 || !ScreenshotConfig.get().actionButtonTooltips) return;
+        if (action < 0 || !isMiniPreviewInteractive() || !ScreenshotConfig.get().actionButtonTooltips) return;
         Minecraft mc = Minecraft.getInstance();
         Component text = actionTooltip(action, closeFirst);
         int textW = mc.font.width(text);
@@ -679,7 +694,37 @@ public class ScreenshotPreviewRenderer {
                 && !(dev.gdlev.better_screenshots.client.MinecraftCompat.screen(mc) instanceof net.minecraft.client.gui.screens.ChatScreen);
     }
 
+    private static boolean isFullscreenScreenOpen() {
+        return MinecraftCompat.screen(Minecraft.getInstance()) instanceof ScreenshotFullscreenScreen;
+    }
+
+    private static boolean isMiniPreviewInteractive() {
+        if (isFullscreenScreenOpen()) return false;
+        Minecraft mc = Minecraft.getInstance();
+        boolean nonChatScreen = MinecraftCompat.screen(mc) != null
+                && !(MinecraftCompat.screen(mc) instanceof net.minecraft.client.gui.screens.ChatScreen);
+        return !nonChatScreen || previewAboveScreen;
+    }
+
+    public static boolean blocksScreenHover() {
+        if (!isMiniPreviewInteractive() || showFrom == -1 || closeStart != -1
+                || showUntil != -1 && System.currentTimeMillis() > showUntil) {
+            return false;
+        }
+
+        Minecraft mc = Minecraft.getInstance();
+        double mouseX = mc.mouseHandler.xpos() * mc.getWindow().getGuiScaledWidth()
+                / mc.getWindow().getScreenWidth();
+        double mouseY = mc.mouseHandler.ypos() * mc.getWindow().getGuiScaledHeight()
+                / mc.getWindow().getScreenHeight();
+        return isInsidePreview(mouseX, mouseY);
+    }
+
     public static boolean handleClick(double mouseX, double mouseY) {
+        if (isFullscreenScreenOpen()) {
+            lastPreviewClickMs = -1L;
+            return false;
+        }
         if (showFrom == -1) return false;
         if (closeStart != -1) return false;
         if (showUntil != -1 && System.currentTimeMillis() > showUntil) return false;
@@ -735,6 +780,21 @@ public class ScreenshotPreviewRenderer {
         return false;
     }
 
+    private static void pausePreviewTimerWhileHovered(long now) {
+        if (previewTimerUpdatedAt >= 0 && showUntil > now && closeStart == -1
+                && !isFullscreenScreenOpen()) {
+            Minecraft mc = Minecraft.getInstance();
+            double mouseX = mc.mouseHandler.xpos() * mc.getWindow().getGuiScaledWidth()
+                    / mc.getWindow().getScreenWidth();
+            double mouseY = mc.mouseHandler.ypos() * mc.getWindow().getGuiScaledHeight()
+                    / mc.getWindow().getScreenHeight();
+            if (isInsidePreview(mouseX, mouseY)) {
+                showUntil += Math.max(0L, now - previewTimerUpdatedAt);
+            }
+        }
+        previewTimerUpdatedAt = now;
+    }
+
     private static boolean isInsidePreview(double mouseX, double mouseY) {
         return previewHitW > 0 && previewHitH > 0
                 && mouseX >= previewHitX && mouseX <= previewHitX + previewHitW
@@ -746,6 +806,7 @@ public class ScreenshotPreviewRenderer {
         previewHitY = -100;
         previewHitW = 0;
         previewHitH = 0;
+        previewTimerUpdatedAt = -1L;
         lastPreviewClickMs = -1L;
     }
 

@@ -1,6 +1,7 @@
 package dev.gdlev.better_screenshots.client;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.toasts.ToastManager;
 import net.minecraft.client.gui.screens.Screen;
@@ -23,5 +24,9 @@ public final class MinecraftCompat {
 
     public static ToastManager toastManager(Minecraft minecraft) {
         return minecraft.gui.toastManager();
+    }
+
+    public static boolean isPrimaryMouseButton(int button) {
+        return button == InputConstants.MOUSE_BUTTON_LEFT;
     }
 }

@@ -747,12 +747,12 @@ public class UploaderConfigScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent input, boolean consumed) {
-        if (input.button() == 0 && doneButton != null && doneButton.isMouseOver(input.x(), input.y())) {
+        if (MinecraftCompat.isPrimaryMouseButton(input.button()) && doneButton != null && doneButton.isMouseOver(input.x(), input.y())) {
             dev.gdlev.better_screenshots.client.MinecraftCompat.setScreen(minecraft, parent);
             return true;
         }
 
-        if (input.button() == 0 && maxScroll > 0) {
+        if (MinecraftCompat.isPrimaryMouseButton(input.button()) && maxScroll > 0) {
             int lx = leftX();
             int sTop = dynamicTop() - 2;
             int sBottom = bottomBtnY() - 2;
@@ -777,7 +777,7 @@ public class UploaderConfigScreen extends Screen {
 
     @Override
     public boolean mouseDragged(MouseButtonEvent input, double dx, double dy) {
-        if (input.button() == 0 && draggingScrollbar) {
+        if (MinecraftCompat.isPrimaryMouseButton(input.button()) && draggingScrollbar) {
             int sTop = dynamicTop() - 2;
             int sBottom = bottomBtnY() - 2;
             int sHeight = sBottom - sTop;
@@ -791,7 +791,7 @@ public class UploaderConfigScreen extends Screen {
 
     @Override
     public boolean mouseReleased(MouseButtonEvent input) {
-        if (input.button() == 0 && draggingScrollbar) {
+        if (MinecraftCompat.isPrimaryMouseButton(input.button()) && draggingScrollbar) {
             draggingScrollbar = false;
             return true;
         }

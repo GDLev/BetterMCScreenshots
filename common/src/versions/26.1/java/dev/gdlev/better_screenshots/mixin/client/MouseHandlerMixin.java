@@ -40,10 +40,9 @@ public class MouseHandlerMixin {
             }
         }
 
-        // Mini preview only belongs to gameplay input. Chat is the one allowed
-        // screen overlay; normal menus may hide the preview and must not let its
-        // stale hitbox consume clicks.
-        if (mc.screen == null || mc.screen instanceof net.minecraft.client.gui.screens.ChatScreen) {
+        if (mc.screen == null
+                || mc.screen instanceof net.minecraft.client.gui.screens.ChatScreen
+                || ScreenshotPreviewRenderer.isPreviewAboveScreen()) {
             if (input.button() == 0) {
                 if (ScreenshotPreviewRenderer.handleClick(mouseX, mouseY)) {
                     ci.cancel();

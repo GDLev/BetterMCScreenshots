@@ -485,7 +485,10 @@ public class ScreenshotFullscreenScreen extends Screen {
         }
         if (!editingName) {
             String customName = displayName(file);
-            String label = customName != null ? customName : formatScreenshotTime(file.lastModified());
+        String label = customName != null ? customName
+                : ScreenshotConfig.get().formatScreenshotTime
+                        ? formatScreenshotTime(file.lastModified())
+                        : file.getName();
             int labelW = width - (interactive ? EDIT_ICON_W : 0) - 10;
             if (font.width(label) > labelW) {
                 String clipped = label;
@@ -827,6 +830,7 @@ public class ScreenshotFullscreenScreen extends Screen {
     public void render(GuiGraphics context,
                                    int mouseX, int mouseY, float delta) {
         this.renderBackground(context, mouseX, mouseY, delta);
+        ScreenshotPreviewRenderer.renderBehindFullscreen(context);
 
         // Keep fullscreen content above parent menu.
         context.pose().pushPose();

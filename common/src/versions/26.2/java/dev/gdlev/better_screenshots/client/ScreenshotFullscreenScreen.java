@@ -1,6 +1,7 @@
 package dev.gdlev.better_screenshots.client;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
@@ -474,7 +475,10 @@ public class ScreenshotFullscreenScreen extends Screen {
         }
         if (!editingName) {
             String customName = displayName(file);
-            String label = customName != null ? customName : formatScreenshotTime(file.lastModified());
+        String label = customName != null ? customName
+                : ScreenshotConfig.get().formatScreenshotTime
+                        ? formatScreenshotTime(file.lastModified())
+                        : file.getName();
             int labelW = width - EDIT_ICON_W - 10;
             if (font.width(label) > labelW) {
                 String clipped = label;
@@ -845,6 +849,7 @@ public class ScreenshotFullscreenScreen extends Screen {
                                    int mouseX, int mouseY, float delta) {
         long    now     = System.currentTimeMillis();
         boolean useAnim = ScreenshotConfig.get().uiAnimationsEnabled();
+        ScreenshotPreviewRenderer.renderBehindFullscreen(context);
 
         // ── Background dim ────────────────────────────────────────────────────
         int bgAlpha;
@@ -1153,7 +1158,7 @@ public class ScreenshotFullscreenScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent input, boolean consumed) {
-        if (input.button() == 0 && handleNavClick(input.x(), input.y())) return true;
+        if (MinecraftCompat.isPrimaryMouseButton(input.button()) && handleNavClick(input.x(), input.y())) return true;
         return super.mouseClicked(input, consumed);
     }
 
@@ -1162,11 +1167,11 @@ public class ScreenshotFullscreenScreen extends Screen {
         int key = input.key();
 
         if (editingName) {
-            if (key == 257 || key == 335) { // Enter / keypad Enter
+            if (key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER) {
                 acceptNameEdit();
                 return true;
             }
-            if (key == 256) { // ESC
+            if (key == InputConstants.KEY_ESCAPE) {
                 cancelNameEdit();
                 return true;
             }
@@ -1178,11 +1183,11 @@ public class ScreenshotFullscreenScreen extends Screen {
 
         if (!closing && loaded && expectedTexture != null
                 && screenshotFiles.size() > 1 && currentFileIndex >= 0) {
-            if (key == 263 && hasPrev()) { navigateTo(-1); return true; } // ←
-            if (key == 262 && hasNext()) { navigateTo(+1); return true; } // →
+            if (key == InputConstants.KEY_LEFT && hasPrev()) { navigateTo(-1); return true; }
+            if (key == InputConstants.KEY_RIGHT && hasNext()) { navigateTo(+1); return true; }
         }
 
-        if (key == 256) { // ESC
+        if (key == InputConstants.KEY_ESCAPE) {
             closeLikeEscape();
             return true;
         }

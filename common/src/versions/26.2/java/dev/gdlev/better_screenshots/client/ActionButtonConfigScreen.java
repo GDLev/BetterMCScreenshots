@@ -730,7 +730,7 @@ public class ActionButtonConfigScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent input, boolean consumed) {
-        if (input.button() == 0) {
+        if (MinecraftCompat.isPrimaryMouseButton(input.button())) {
             buildPreviewTargets();
             animatePreviewActions();
             layoutTrayActions();
@@ -755,7 +755,7 @@ public class ActionButtonConfigScreen extends Screen {
 
     @Override
     public boolean mouseDragged(MouseButtonEvent input, double dx, double dy) {
-        if (input.button() == 0 && draggingAction >= 0) {
+        if (MinecraftCompat.isPrimaryMouseButton(input.button()) && draggingAction >= 0) {
             dragMouseX = input.x();
             dragMouseY = input.y();
             updateDragTarget(dragMouseX, dragMouseY);
@@ -766,7 +766,7 @@ public class ActionButtonConfigScreen extends Screen {
 
     @Override
     public boolean mouseReleased(MouseButtonEvent input) {
-        if (input.button() == 0 && draggingAction >= 0) {
+        if (MinecraftCompat.isPrimaryMouseButton(input.button()) && draggingAction >= 0) {
             dragMouseX = input.x();
             dragMouseY = input.y();
             updateDragTarget(dragMouseX, dragMouseY);

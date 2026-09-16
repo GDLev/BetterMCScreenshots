@@ -6,6 +6,7 @@
   "mixins": [
     "GuiMixin",
     "KeyboardHandlerMixin",
+    "LegacyMouseHandlerMixin",
     "ScreenshotRecorderMixin",
     "ScreenMixin",
     "PauseScreenMixin",

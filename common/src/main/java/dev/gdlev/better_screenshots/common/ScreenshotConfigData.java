@@ -82,6 +82,7 @@ public class ScreenshotConfigData {
     public boolean actionButtonTooltips = true;
     public boolean pixelatedPreviews = false;
     public boolean fullscreenNameBar = true;
+    public boolean formatScreenshotTime = true;
 
     public ActionButtonCorner miniPreviewShowCorner = ActionButtonCorner.TOP_RIGHT;
     public ActionButtonCorner miniPreviewCopyCorner = ActionButtonCorner.TOP_RIGHT;
