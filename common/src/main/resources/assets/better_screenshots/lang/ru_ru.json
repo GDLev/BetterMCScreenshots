@@ -113,7 +113,7 @@
   "better_screenshots.upload.error.file_not_found": "Файл не найден",
   "better_screenshots.upload.error.screenshot_file_not_found": "Файл снимка экрана не найден",
   "better_screenshots.upload.error.imgur_missing_url": "Ответ Imgur не содержит загруженный URL.",
-  "better_screenshots.upload.error.http_failed": "%s не удалось загрузить (%s): %s",
+  "better_screenshots.upload.error.http_failed": "Ошибка загрузки через %s (%s): %s",
 
   "better_screenshots.upload.toast.title": "Загрузка завершена",
   "better_screenshots.upload.toast.desc": "URL скопирован в буфер обмена",
