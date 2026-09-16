@@ -133,7 +133,7 @@
   "better_screenshots.config.sound.none": "Нет",
   "better_screenshots.config.sound.soft": "Мягкий",
 
-  "better_screenshots.config.time_formatting": "Этикетка",
+  "better_screenshots.config.time_formatting": "Подпись снимка экрана",
   "better_screenshots.config.time_formatting.filename": "Название файла",
   "better_screenshots.config.time_formatting.time": "Время",
 
